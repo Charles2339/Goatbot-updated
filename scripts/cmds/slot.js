@@ -1,51 +1,59 @@
 module.exports = {
-  name: "slot",
-  aliases: ["slots"],
-  description: "Bet your money and try your luck 🎰",
-  usage: "+slot <amount>",
-  cooldown: 5,
+  config: {
+    name: "slot",
+    aliases: ["slots"],
+    version: "1.0",
+    author: "CharlesMK",
+    countDown: 5,
+    role: 0,
+    description: {
+      en: "Bet your money and try your luck (60% win chance)"
+    },
+    category: "game",
+    guide: {
+      en: "{pn} <amount>\nExample: {pn} 50"
+    }
+  },
 
-  async run({ event, args, usersData, api }) {
-    const { senderID, threadID } = event;
+  onStart: async function ({ args, message, event, usersData }) {
+    const { senderID } = event;
 
-    // Get bet amount
     const bet = parseInt(args[0]);
-
     if (!bet || bet <= 0) {
-      return api.sendMessage(
-        "❌ Please enter a valid amount.\nExample: +slot 50",
-        threadID
+      return message.reply("❌ Please enter a valid amount.\nExample: +slot 50");
+    }
+
+    const userData = await usersData.get(senderID);
+    const balance = userData.money || 0;
+
+    if (bet > balance) {
+      return message.reply(
+        `❌ You don't have enough money.\n💰 Your balance: $${balance}`
       );
     }
 
-    // Get user's current money
-    const userMoney = await usersData.get(senderID, "money") || 0;
+    // 60% win chance
+    const win = Math.random() < 0.6;
 
-    // Check if user has enough money
-    if (bet > userMoney) {
-      return api.sendMessage(
-        `❌ You don't have enough money.\n💰 Your balance: $${userMoney}`,
-        threadID
-      );
-    }
+    if (win) {
+      await usersData.set(senderID, {
+        money: balance + bet,
+        exp: userData.exp,
+        data: userData.data
+      });
 
-    // Slot chances
-    const winChance = Math.random() < 0.6; // 60% win, 40% lose
-
-    if (winChance) {
-      const winnings = bet * 2;
-      await usersData.set(senderID, userMoney + bet, "money");
-
-      return api.sendMessage(
-        `🎰 SLOT MACHINE 🎰\n\n✅ You WON!\n💵 Bet: $${bet}\n🏆 Won: $${winnings}\n💰 New Balance: $${userMoney + bet}`,
-        threadID
+      return message.reply(
+        `🎰 SLOT MACHINE 🎰\n\n✅ YOU WON!\n💵 Bet: $${bet}\n🏆 Won: $${bet}\n💰 New Balance: $${balance + bet}`
       );
     } else {
-      await usersData.set(senderID, userMoney - bet, "money");
+      await usersData.set(senderID, {
+        money: balance - bet,
+        exp: userData.exp,
+        data: userData.data
+      });
 
-      return api.sendMessage(
-        `🎰 SLOT MACHINE 🎰\n\n❌ You LOST!\n💵 Lost: $${bet}\n💰 New Balance: $${userMoney - bet}`,
-        threadID
+      return message.reply(
+        `🎰 SLOT MACHINE 🎰\n\n❌ YOU LOST!\n💵 Lost: $${bet}\n💰 New Balance: $${balance - bet}`
       );
     }
   }
