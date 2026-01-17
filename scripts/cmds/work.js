@@ -1,4 +1,3 @@
-/ Store work cooldowns for each user
 const workCooldowns = new Map();
 
 module.exports = {
