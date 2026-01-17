@@ -21,12 +21,12 @@ module.exports = {
   config: {
     name: "ai",
     version: "2.3",
-    role: 4,
+    role: 0,
     author: "CharlesMK",
     description: "Chat with Meta AI (with custom personality & memory)",
     category: "AI",
     usages: "[message] or reply to the bot's message.\nUse 'ai reset' to clear conversation (keeps your profile).\nUse 'ai forget' to clear everything including your name.",
-    cooldowns: 5
+    cooldowns: 1
   },
 
   onStart: async function({ message, args, event, usersData }) {
