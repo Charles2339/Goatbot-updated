@@ -4,7 +4,7 @@ module.exports = {
   config: {
     name: "anime",
     aliases: ["animedl", "animedownload"],
-    version: "1.0",
+    version: "2.0",
     author: "CharlesMK",
     countDown: 10,
     role: 0,
@@ -13,7 +13,7 @@ module.exports = {
     },
     category: "download",
     guide: {
-      en: "{pn} <anime name> <episode number>\nExample: {pn} Naruto 1\n{pn} One Piece 100"
+      en: "{pn} <anime name> <episode number>\nExample: {pn} one-piece 1\n{pn} naruto 5"
     }
   },
 
@@ -22,156 +22,205 @@ module.exports = {
       return message.reply(
         "❌ Please provide anime name and episode number!\n\n" +
         "Usage: +anime <name> <episode>\n" +
-        "Example: +anime Naruto 1"
+        "Examples:\n" +
+        "+anime one-piece 1\n" +
+        "+anime naruto 5\n" +
+        "+anime attack-on-titan 1\n\n" +
+        "💡 Tip: Use hyphens (-) instead of spaces"
       );
     }
 
     // Extract episode number (last argument)
     const episodeNum = args[args.length - 1];
     
-    // Check if last argument is a number
     if (isNaN(episodeNum)) {
       return message.reply(
         "❌ Please provide a valid episode number!\n\n" +
-        "Example: +anime Naruto 1"
+        "Example: +anime one-piece 1"
       );
     }
 
-    // Anime name is everything except the last argument
-    const animeName = args.slice(0, -1).join(' ');
+    // Anime name - convert spaces to hyphens
+    const animeName = args.slice(0, -1).join('-').toLowerCase();
 
     try {
-      await message.reply(`🔍 Searching for ${animeName} Episode ${episodeNum}... ⏳`);
+      await message.reply(`🔍 Searching for ${animeName.replace(/-/g, ' ')} Episode ${episodeNum}... ⏳`);
 
-      // Try API 1: GoGoAnime API
       let videoUrl = null;
-      let animeTitle = animeName;
+      let downloadUrl = null;
 
+      // API 1: AnimePahe API
       try {
-        // Search for anime
-        const searchResponse = await axios.get(
-          `https://api.consumet.org/anime/gogoanime/${encodeURIComponent(animeName)}`,
-          { timeout: 15000 }
-        );
+        const searchUrl = `https://animepahe.ru/api?m=search&q=${encodeURIComponent(animeName.replace(/-/g, ' '))}`;
+        const searchResponse = await axios.get(searchUrl, {
+          timeout: 15000,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
 
-        if (searchResponse.data?.results && searchResponse.data.results.length > 0) {
-          const anime = searchResponse.data.results[0];
-          animeTitle = anime.title;
-          const animeId = anime.id;
+        if (searchResponse.data?.data && searchResponse.data.data.length > 0) {
+          const animeId = searchResponse.data.data[0].session;
+          
+          const episodeUrl = `https://animepahe.ru/api?m=release&id=${animeId}&sort=episode_asc&page=1`;
+          const episodeResponse = await axios.get(episodeUrl, {
+            timeout: 15000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+          });
 
-          // Get episode info
-          const episodesResponse = await axios.get(
-            `https://api.consumet.org/anime/gogoanime/info/${animeId}`,
-            { timeout: 15000 }
-          );
-
-          if (episodesResponse.data?.episodes) {
-            const episode = episodesResponse.data.episodes.find(ep => 
-              ep.number === parseInt(episodeNum)
-            );
-
-            if (episode) {
-              // Get video link
-              const videoResponse = await axios.get(
-                `https://api.consumet.org/anime/gogoanime/watch/${episode.id}`,
-                { timeout: 15000 }
-              );
-
-              if (videoResponse.data?.sources) {
-                // Get best quality
-                const source = videoResponse.data.sources.find(s => s.quality === '720p') || 
-                              videoResponse.data.sources.find(s => s.quality === '480p') ||
-                              videoResponse.data.sources[0];
-                
-                videoUrl = source.url;
-              }
-            }
+          const episode = episodeResponse.data?.data?.find(ep => ep.episode == episodeNum);
+          
+          if (episode) {
+            downloadUrl = `https://animepahe.ru/play/${animeId}/${episode.session}`;
+            console.log("AnimePahe found:", downloadUrl);
           }
         }
       } catch (e) {
-        console.log("API 1 failed:", e.message);
+        console.log("AnimePahe failed:", e.message);
       }
 
-      // Try API 2: AnimeFox (Backup)
-      if (!videoUrl) {
+      // API 2: Gogoanime via different endpoint
+      if (!videoUrl && !downloadUrl) {
         try {
-          const searchResponse = await axios.get(
-            `https://api-anime-rouge.vercel.app/anime/search/${encodeURIComponent(animeName)}`,
-            { timeout: 15000 }
+          // Format: gogoanime-id-episode-number
+          const gogoId = `${animeName}-episode-${episodeNum}`;
+          
+          const response = await axios.get(
+            `https://gogoanime.consumet.stream/vidcdn/watch/${gogoId}`,
+            { 
+              timeout: 15000,
+              headers: { 'User-Agent': 'Mozilla/5.0' }
+            }
           );
 
-          if (searchResponse.data?.results?.[0]) {
-            const anime = searchResponse.data.results[0];
-            animeTitle = anime.title?.english || anime.title?.romaji || animeName;
+          if (response.data?.sources) {
+            const source = response.data.sources.find(s => s.quality === '720p') || 
+                          response.data.sources.find(s => s.quality === '480p') ||
+                          response.data.sources[0];
             
-            const episodeResponse = await axios.get(
-              `https://api-anime-rouge.vercel.app/anime/episode/${anime.id}/${episodeNum}`,
-              { timeout: 15000 }
-            );
-
-            videoUrl = episodeResponse.data?.video || episodeResponse.data?.sources?.[0]?.url;
+            videoUrl = source.url;
+            console.log("Gogoanime found:", videoUrl);
           }
         } catch (e) {
-          console.log("API 2 failed:", e.message);
+          console.log("Gogoanime failed:", e.message);
         }
       }
 
-      // Try API 3: Anime API (Backup 2)
-      if (!videoUrl) {
+      // API 3: Alternative Gogoanime
+      if (!videoUrl && !downloadUrl) {
+        try {
+          const animeId = `${animeName}`;
+          const episodeId = `${animeName}-episode-${episodeNum}`;
+          
+          const response = await axios.get(
+            `https://api.consumet.org/anime/gogoanime/watch/${episodeId}`,
+            { 
+              timeout: 15000,
+              headers: { 'User-Agent': 'Mozilla/5.0' }
+            }
+          );
+
+          if (response.data?.sources) {
+            const source = response.data.sources.find(s => s.quality === '720p') || 
+                          response.data.sources.find(s => s.quality === '480p') ||
+                          response.data.sources[0];
+            
+            videoUrl = source.url;
+            console.log("Consumet found:", videoUrl);
+          }
+        } catch (e) {
+          console.log("Consumet failed:", e.message);
+        }
+      }
+
+      // API 4: AnimeFox
+      if (!videoUrl && !downloadUrl) {
         try {
           const response = await axios.get(
-            `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(animeName)}&limit=1`,
-            { timeout: 15000 }
+            `https://api-aniwatch.onrender.com/anime/episode-srcs?id=${animeName}-${episodeNum}`,
+            { 
+              timeout: 15000,
+              headers: { 'User-Agent': 'Mozilla/5.0' }
+            }
           );
 
-          if (response.data?.data?.[0]) {
-            animeTitle = response.data.data[0].title;
+          if (response.data?.sources) {
+            videoUrl = response.data.sources[0]?.url;
+            console.log("AnimeFox found:", videoUrl);
           }
-
-          // Try alternative download API
-          const dlResponse = await axios.post(
-            'https://anime-dl-api.herokuapp.com/download',
-            {
-              anime: animeName,
-              episode: episodeNum
-            },
-            { timeout: 15000 }
-          );
-
-          videoUrl = dlResponse.data?.url || dlResponse.data?.video;
         } catch (e) {
-          console.log("API 3 failed:", e.message);
+          console.log("AnimeFox failed:", e.message);
         }
       }
 
-      if (!videoUrl) {
+      // API 5: Direct streaming link generator
+      if (!videoUrl && !downloadUrl) {
+        try {
+          // Try common streaming patterns
+          const possibleUrls = [
+            `https://gogoplay1.com/streaming.php?id=${animeName}-episode-${episodeNum}`,
+            `https://gogohd.net/streaming.php?id=${animeName}-episode-${episodeNum}`,
+            `https://streamani.net/streaming.php?id=${animeName}-episode-${episodeNum}`
+          ];
+
+          for (const url of possibleUrls) {
+            try {
+              const response = await axios.head(url, { timeout: 5000 });
+              if (response.status === 200) {
+                videoUrl = url;
+                console.log("Direct streaming found:", videoUrl);
+                break;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        } catch (e) {
+          console.log("Direct streaming failed:", e.message);
+        }
+      }
+
+      if (!videoUrl && !downloadUrl) {
         return message.reply(
-          `❌ Could not find ${animeName} Episode ${episodeNum}\n\n` +
-          `Please check:\n` +
-          `• Anime name spelling\n` +
-          `• Episode number exists\n` +
-          `• Try different spelling\n\n` +
-          `Example: +anime One Piece 1`
+          `❌ Could not find "${animeName.replace(/-/g, ' ')}" Episode ${episodeNum}\n\n` +
+          `💡 Tips:\n` +
+          `• Use hyphens: "one-piece" not "One Piece"\n` +
+          `• Try lowercase: "naruto" not "Naruto"\n` +
+          `• Check episode exists\n\n` +
+          `Examples that work:\n` +
+          `+anime one-piece 1\n` +
+          `+anime naruto-shippuden 1\n` +
+          `+anime attack-on-titan 1\n` +
+          `+anime demon-slayer 1\n` +
+          `+anime my-hero-academia 1`
         );
       }
 
-      await message.reply(`⏬ Downloading ${animeTitle} Episode ${episodeNum}... 📺`);
+      // If we have a download page URL, inform user
+      if (downloadUrl && !videoUrl) {
+        return message.reply(
+          `✅ Found "${animeName.replace(/-/g, ' ')}" Episode ${episodeNum}!\n\n` +
+          `📺 Direct streaming not available, but you can watch here:\n` +
+          `${downloadUrl}\n\n` +
+          `The APIs are having issues with direct downloads right now.`
+        );
+      }
+
+      await message.reply(`⏬ Downloading ${animeName.replace(/-/g, ' ')} Episode ${episodeNum}... 📺`);
 
       // Download video
       const videoResponse = await axios.get(videoUrl, {
         responseType: 'stream',
-        timeout: 120000, // 2 minutes for large files
+        timeout: 180000, // 3 minutes
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Referer': 'https://gogoanime.pe/'
         },
-        maxContentLength: 100 * 1024 * 1024, // 100MB limit
+        maxContentLength: 100 * 1024 * 1024,
         maxBodyLength: 100 * 1024 * 1024
       });
 
       // Send video
       await message.reply({
-        body: `✅ ${animeTitle} - Episode ${episodeNum}\n\n📺 Enjoy watching! 🍿`,
+        body: `✅ ${animeName.replace(/-/g, ' ').toUpperCase()} - Episode ${episodeNum}\n\n📺 Enjoy watching! 🍿`,
         attachment: videoResponse.data
       });
 
@@ -181,20 +230,24 @@ module.exports = {
       let errorMsg = "Failed to download anime episode.";
 
       if (error.code === 'ECONNABORTED') {
-        errorMsg = "Download timed out. The episode file might be too large.";
+        errorMsg = "Download timed out. Episode might be too large or servers are slow.";
       } else if (error.response?.status === 404) {
-        errorMsg = "Episode not found. Please check the anime name and episode number.";
+        errorMsg = "Episode not found. Check the anime name format.";
       } else if (error.message?.includes('maxContentLength')) {
-        errorMsg = "Episode file is too large (>100MB). Try a different episode or lower quality.";
+        errorMsg = "Episode file is too large (>100MB).";
       }
 
       return message.reply(
         `❌ ${errorMsg}\n\n` +
-        `Troubleshooting:\n` +
-        `• Check anime name spelling\n` +
-        `• Verify episode exists\n` +
-        `• Try popular anime for better availability\n` +
-        `• Some episodes may be too large to send`
+        `Please try:\n` +
+        `• Use format: +anime one-piece 1\n` +
+        `• Use hyphens between words\n` +
+        `• Use lowercase\n` +
+        `• Try popular anime with simple names\n\n` +
+        `Working examples:\n` +
+        `+anime naruto 1\n` +
+        `+anime bleach 1\n` +
+        `+anime one-piece 1`
       );
     }
   }
