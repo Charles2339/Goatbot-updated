@@ -2,30 +2,30 @@ module.exports = {
   config: {
     name: "maths",
     aliases: ["math", "quiz"],
-    version: "2.1",
+    version: "3.0",
     author: "CharlesMK",
     countDown: 3,
     role: 0,
     description: {
-      en: "Answer math questions and earn EXP!"
+      en: "Answer math questions and earn money + EXP!"
     },
     category: "game",
     guide: {
-      en: "{pn} <difficulty>\nDifficulties: easy, mid, hard, hell\n\nExample: {pn} easy\n\nRewards:\n🟢 Easy: 25 EXP\n🟡 Mid: 62 EXP\n🟠 Hard: 100 EXP\n🔴 Hell: 500 EXP"
+      en: "{pn} <difficulty>\nDifficulties: easy, mid, hard, hell\n\nExample: {pn} easy\n\nRewards:\n🟢 Easy: $500 + 25 EXP\n🟡 Mid: $1,250 + 62 EXP\n🟠 Hard: $2,500 + 100 EXP\n🔴 Hell: $10,000 + 500 EXP"
     }
   },
 
-  onStart: async function ({ args, message, event, usersData }) {
+  onStart: async function ({ args, message, event, usersData, api }) {
     const { senderID } = event;
 
     if (args.length === 0) {
       return message.reply(
         "📚 𝗠𝗔𝗧𝗛 𝗤𝗨𝗜𝗭\n\n" +
         "Choose a difficulty:\n" +
-        "🟢 +maths easy (25 EXP)\n" +
-        "🟡 +maths mid (62 EXP)\n" +
-        "🟠 +maths hard (100 EXP)\n" +
-        "🔴 +maths hell (500 EXP)"
+        "🟢 +maths easy ($500 + 25 EXP)\n" +
+        "🟡 +maths mid ($1,250 + 62 EXP)\n" +
+        "🟠 +maths hard ($2,500 + 100 EXP)\n" +
+        "🔴 +maths hell ($10,000 + 500 EXP)"
       );
     }
 
@@ -162,16 +162,23 @@ module.exports = {
       return { q: question, a: answer };
     };
 
-    const expRewards = { easy: 25, mid: 62, hard: 100, hell: 500 };
+    const rewards = {
+      easy: { exp: 25, money: 500 },
+      mid: { exp: 62, money: 1250 },
+      hard: { exp: 100, money: 2500 },
+      hell: { exp: 500, money: 10000 }
+    };
+
     const timeLimits = {
       easy: 0,
       mid: 70 * 1000,
       hard: 80 * 1000,
       hell: 50 * 1000
     };
+
     const emojis = { easy: "🟢", mid: "🟡", hard: "🟠", hell: "🔴" };
 
-    if (!expRewards[difficulty]) {
+    if (!rewards[difficulty]) {
       return message.reply("❌ Invalid difficulty!");
     }
 
@@ -186,7 +193,7 @@ module.exports = {
     await message.reply(
       `${emojis[difficulty]} 𝗠𝗔𝗧𝗛 𝗤𝗨𝗘𝗦𝗧𝗜𝗢𝗡 ${emojis[difficulty]}\n\n` +
       `Difficulty: ${difficulty.toUpperCase()}\n` +
-      `Reward: ${expRewards[difficulty]} EXP\n` +
+      `💰 Reward: $${rewards[difficulty].money.toLocaleString()} + ${rewards[difficulty].exp} EXP\n` +
       `${timeText}\n\n` +
       `❓ ${question.q}`
     );
@@ -195,24 +202,24 @@ module.exports = {
     global.GoatBot.mathQuestions = global.GoatBot.mathQuestions || {};
     global.GoatBot.mathQuestions[senderID] = {
       answer: question.a,
-      exp: expRewards[difficulty],
+      reward: rewards[difficulty],
       difficulty,
       timestamp: Date.now(),
       timeLimit: timeLimits[difficulty]
     };
   },
 
-  onChat: async function ({ message, event, usersData }) {
+  onChat: async function ({ message, event, usersData, api }) {
     const { senderID, body } = event;
     const data = global.GoatBot?.mathQuestions?.[senderID];
     if (!data) return;
 
-    if (
-      data.timeLimit > 0 &&
-      Date.now() - data.timestamp > data.timeLimit
-    ) {
+    // Check time limit
+    const timeTaken = (Date.now() - data.timestamp) / 1000;
+    
+    if (data.timeLimit > 0 && Date.now() - data.timestamp > data.timeLimit) {
       delete global.GoatBot.mathQuestions[senderID];
-      return message.reply("⏰ Time’s up! Try again.");
+      return message.reply("⏰ Time's up! Try again.");
     }
 
     const userAnswer = parseInt(body.trim());
@@ -220,16 +227,83 @@ module.exports = {
 
     const user = await usersData.get(senderID);
 
+    // Get user info for name
+    let userName = "User";
+    try {
+      const userInfo = await api.getUserInfo(senderID);
+      userName = userInfo[senderID]?.name || "User";
+    } catch (e) {
+      userName = "User";
+    }
+
+    // Initialize stats if not exists
+    if (!user.data) user.data = {};
+    if (!user.data.mathStats) {
+      user.data.mathStats = {
+        totalQuestions: 0,
+        correctAnswers: 0,
+        totalEarned: 0
+      };
+    }
+
+    const stats = user.data.mathStats;
+    stats.totalQuestions += 1;
+
     if (userAnswer === data.answer) {
-      const totalExp = (user.exp || 0) + data.exp;
-      await usersData.set(senderID, { ...user, exp: totalExp });
+      // CORRECT ANSWER
+      stats.correctAnswers += 1;
+      stats.totalEarned += data.reward.money;
+
+      const totalExp = (user.exp || 0) + data.reward.exp;
+      const totalMoney = (user.money || 0) + data.reward.money;
+      
+      // Calculate accuracy
+      const accuracy = Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
+
+      // Rank based on accuracy
+      let rank = "🌟";
+      if (accuracy >= 95) rank = "🏆 Legend";
+      else if (accuracy >= 85) rank = "⭐ Expert";
+      else if (accuracy >= 75) rank = "🚀 Pro";
+      else if (accuracy >= 60) rank = "💫 Rising Star";
+      else rank = "🌟 Beginner";
+
+      await usersData.set(senderID, {
+        ...user,
+        exp: totalExp,
+        money: totalMoney,
+        data: user.data
+      });
 
       message.reply(
-        `✅ Correct!\n+${data.exp} EXP\n📊 Total EXP: ${totalExp}`
+        `✅ 𝗖𝗢𝗥𝗥𝗘𝗖𝗧! 🎉\n\n` +
+        `💰 𝗠𝗼𝗻𝗲𝘆: +$${data.reward.money.toLocaleString()}\n` +
+        `✨ 𝗘𝗫𝗣: +${data.reward.exp}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📊 𝗦𝗰𝗼𝗿𝗲: ${stats.correctAnswers}/${stats.totalQuestions} (${accuracy}%)\n` +
+        `⚡ 𝗧𝗶𝗺𝗲: ${timeTaken.toFixed(1)}s\n` +
+        `💵 𝗧𝗼𝘁𝗮𝗹 𝗘𝗮𝗿𝗻𝗲𝗱: $${stats.totalEarned.toLocaleString()}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 ${userName} ${rank}`
       );
     } else {
+      // WRONG ANSWER
+      const accuracy = Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
+
+      await usersData.set(senderID, {
+        ...user,
+        data: user.data
+      });
+
       message.reply(
-        `❌ Wrong!\nYour answer: ${userAnswer}\nCorrect: ${data.answer}`
+        `❌ 𝗪𝗥𝗢𝗡𝗚! 😔\n\n` +
+        `💭 𝗬𝗼𝘂𝗿 𝗔𝗻𝘀𝘄𝗲𝗿: ${userAnswer}\n` +
+        `✅ 𝗖𝗼𝗿𝗿𝗲𝗰𝘁: ${data.answer}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📊 𝗦𝗰𝗼𝗿𝗲: ${stats.correctAnswers}/${stats.totalQuestions} (${accuracy}%)\n` +
+        `⚡ 𝗧𝗶𝗺𝗲: ${timeTaken.toFixed(1)}s\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `Keep trying! 💪`
       );
     }
 
