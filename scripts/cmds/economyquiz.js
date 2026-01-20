@@ -5,7 +5,7 @@ module.exports = {
   config: {
     name: "economyquiz",
     aliases: ["ecoquiz", "economy"],
-    version: "2.5",
+    version: "3.0",
     author: "Charles MK",
     countDown: 5,
     role: 0,
@@ -23,7 +23,7 @@ module.exports = {
 
     try {
       const filePath = path.join(__dirname, "economyquiz", `${difficulty}.json`);
-      if (!fs.existsSync(filePath)) return message.reply("⚠️ Question file missing in /cmds/economyquiz/");
+      if (!fs.existsSync(filePath)) return message.reply("⚠️ Question file missing.");
 
       const questions = await fs.readJSON(filePath);
       const random = questions[Math.floor(Math.random() * questions.length)];
@@ -37,7 +37,7 @@ module.exports = {
       const rewards = { easy: 500, mid: 1200, hard: 2300 };
       const penalties = { easy: 200, mid: 300, hard: 700 };
 
-      const msg = `💰 **ECONOMY QUIZ [${difficulty.toUpperCase()}]** 💰\n\nQuestion: ${random.question}\n\n${optionsMsg}\n━━━━━━━━━━━━━━━━━━\n🎁 Reward: $${rewards[difficulty]}\n💀 Penalty: -$${penalties[difficulty]}\n\n✨ *Reply with A, B, C, or D*`;
+      const msg = `💰 **ECONOMY QUIZ [${difficulty.toUpperCase()}]** 💰\n\nQuestion: ${random.question}\n\n${optionsMsg}\n━━━━━━━━━━━━━━━━━━\n✨ *Reply with A, B, C, or D*`;
 
       return message.reply(msg, (err, info) => {
         global.GoatBot.onReply.set(info.messageID, {
@@ -45,7 +45,6 @@ module.exports = {
           authorID: event.senderID,
           correctAnswer: random.answer.toUpperCase(),
           questionID: info.messageID,
-          difficulty,
           reward: rewards[difficulty],
           penalty: penalties[difficulty]
         });
@@ -64,19 +63,24 @@ module.exports = {
 
     if (!validChoices.includes(userAnswer)) return;
 
-    // Unsend the question
+    // Unsend the question message
     api.unsendMessage(questionID);
 
     const userData = await usersData.get(authorID);
-    const currentMoney = userData.money || 0;
+    const expGain = Math.floor(Math.random() * 51) + 50; // Random EXP between 50-100
 
     if (userAnswer === correctAnswer) {
-      await usersData.set(authorID, { money: currentMoney + reward });
-      return message.reply(`✅ **CORRECT!**\n\nYou earned **$${reward}**! Your new balance is saved to MongoDB.`);
+      const newMoney = (userData.money || 0) + reward;
+      const newExp = (userData.exp || 0) + expGain;
+      
+      await usersData.set(authorID, { money: newMoney, exp: newExp });
+
+      return message.reply(`✅ **𝘾𝙊𝙍𝙍𝙀𝘾𝙏**\n\n𝙔𝙊𝙐 𝙀𝘼𝙍𝙉𝙀𝘿: $${reward} 💵\n𝙀𝙓𝙋 + ${expGain} ⏏️\n𝐍𝐄𝐖 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${newMoney.toLocaleString()}`);
     } else {
-      const newBalance = Math.max(0, currentMoney - penalty);
-      await usersData.set(authorID, { money: newBalance });
-      return message.reply(`❌ **WRONG!**\n\nThe correct answer was **${correctAnswer}**.\nYou lost **$${penalty}**. Balance updated.`);
+      const newMoney = Math.max(0, (userData.money || 0) - penalty);
+      await usersData.set(authorID, { money: newMoney });
+
+      return message.reply(`❌ **𝙄𝙉𝘾𝙊𝙍𝙍𝙀𝘾𝙏**\n\n𝙏𝙝𝙚 𝙖𝙣𝙨𝙗𝙚𝙧 𝙬𝙖𝙨: ${correctAnswer}\n𝙔𝙊𝙐 𝙇𝙊𝙎𝙏: $${penalty} 📉\n𝐍𝐄𝐖 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${newMoney.toLocaleString()}`);
     }
   }
 };
