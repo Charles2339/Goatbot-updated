@@ -5,7 +5,7 @@ module.exports = {
   config: {
     name: "economyquiz",
     aliases: ["ecoquiz", "economy"],
-    version: "2.0",
+    version: "2.5",
     author: "Charles MK",
     countDown: 5,
     role: 0,
@@ -23,7 +23,7 @@ module.exports = {
 
     try {
       const filePath = path.join(__dirname, "economyquiz", `${difficulty}.json`);
-      if (!fs.existsSync(filePath)) return message.reply("⚠️ Question file missing.");
+      if (!fs.existsSync(filePath)) return message.reply("⚠️ Question file missing in /cmds/economyquiz/");
 
       const questions = await fs.readJSON(filePath);
       const random = questions[Math.floor(Math.random() * questions.length)];
@@ -34,14 +34,20 @@ module.exports = {
         optionsMsg += `${letters[i]}. ${opt}\n`;
       });
 
-      const msg = `💰 **ECONOMY QUIZ [${difficulty.toUpperCase()}]** 💰\n\nQuestion: ${random.question}\n\n${optionsMsg}\n━━━━━━━━━━━━━━━━━━\n✨ *Reply with A, B, C, or D*`;
+      const rewards = { easy: 500, mid: 1200, hard: 2300 };
+      const penalties = { easy: 200, mid: 300, hard: 700 };
+
+      const msg = `💰 **ECONOMY QUIZ [${difficulty.toUpperCase()}]** 💰\n\nQuestion: ${random.question}\n\n${optionsMsg}\n━━━━━━━━━━━━━━━━━━\n🎁 Reward: $${rewards[difficulty]}\n💀 Penalty: -$${penalties[difficulty]}\n\n✨ *Reply with A, B, C, or D*`;
 
       return message.reply(msg, (err, info) => {
         global.GoatBot.onReply.set(info.messageID, {
           commandName,
           authorID: event.senderID,
           correctAnswer: random.answer.toUpperCase(),
-          questionID: info.messageID // Store this to unsend it later
+          questionID: info.messageID,
+          difficulty,
+          reward: rewards[difficulty],
+          penalty: penalties[difficulty]
         });
       });
     } catch (e) {
@@ -49,24 +55,28 @@ module.exports = {
     }
   },
 
-  onReply: async function ({ message, Reply, event, api }) {
-    const { authorID, correctAnswer, questionID } = Reply;
+  onReply: async function ({ message, Reply, event, api, usersData }) {
+    const { authorID, correctAnswer, questionID, reward, penalty } = Reply;
     if (event.senderID !== authorID) return;
 
     const userAnswer = event.body.trim().toUpperCase();
     const validChoices = ["A", "B", "C", "D"];
 
-    if (!validChoices.includes(userAnswer)) {
-      return message.reply("❌ Invalid choice! Please reply with A, B, C, or D.");
-    }
+    if (!validChoices.includes(userAnswer)) return;
 
-    // Unsend the original question message
+    // Unsend the question
     api.unsendMessage(questionID);
 
+    const userData = await usersData.get(authorID);
+    const currentMoney = userData.money || 0;
+
     if (userAnswer === correctAnswer) {
-      return message.reply(`✅ **CORRECT!**\nGood job, you picked the right option!`);
+      await usersData.set(authorID, { money: currentMoney + reward });
+      return message.reply(`✅ **CORRECT!**\n\nYou earned **$${reward}**! Your new balance is saved to MongoDB.`);
     } else {
-      return message.reply(`❌ **WRONG!**\nThe correct answer was: **${correctAnswer}**`);
+      const newBalance = Math.max(0, currentMoney - penalty);
+      await usersData.set(authorID, { money: newBalance });
+      return message.reply(`❌ **WRONG!**\n\nThe correct answer was **${correctAnswer}**.\nYou lost **$${penalty}**. Balance updated.`);
     }
   }
 };
