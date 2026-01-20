@@ -32,7 +32,7 @@
                 "jimp": "^1.6.0",
                 "jsonlint-mod": "^1.7.6",
                 "moment-timezone": "^0.5.34",
-                "mongoose": "^9.0.0",
+                "mongoose": "^9.1.4",
                 "mqtt": "^4.3.7",
                 "node-cron": "^3.0.2",
                 "npmlog": "^7.0.1",
