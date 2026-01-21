@@ -4,8 +4,8 @@ const path = __dirname + '/cs_questions.json';
 module.exports = {
   config: {
     name: "computerscience",
-    aliases: ["cs", "csquiz", "comp"],
-    version: "1.5",
+    aliases: ["cs", "csquiz", "quiz computer"],
+    version: "1.6",
     author: "CharlesMK",
     countDown: 3,
     role: 0,
@@ -66,14 +66,11 @@ module.exports = {
     const answer = parseInt(event.body?.trim());
     const timeTaken = (Date.now() - Reply.startTime) / 1000;
 
-    // --- UNSEND LOGIC ---
-    // This removes the question message to keep the chat clean
     try {
       api.unsendMessage(Reply.messageID);
     } catch (e) {
       console.log("Error unsending message:", e);
     }
-    // --------------------
 
     if (isNaN(answer) || answer < 1 || answer > 4) return message.reply("❌ Invalid choice.");
     global.GoatBot.onReply.delete(Reply.messageID);
@@ -88,26 +85,33 @@ module.exports = {
     stats.totalQuestions++;
     const isCorrect = (answer - 1 === Reply.correctIndex);
 
+    let finalMoney, finalExp;
+
     if (isCorrect) {
       stats.correctAnswers++;
       const speedRatio = Math.max(0, (Reply.reward.time - timeTaken) / Reply.reward.time);
       const bonusMoney = Math.round(Reply.reward.money * speedRatio * 0.5);
       const bonusExp = Math.round(Reply.reward.exp * speedRatio * 0.5);
 
-      stats.totalEarned += (Reply.reward.money + bonusMoney);
-      const accuracy = Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
+      finalMoney = Reply.reward.money + bonusMoney;
+      finalExp = Reply.reward.exp + bonusExp;
+      stats.totalEarned += finalMoney;
 
-      await usersData.set(userID, { 
-        ...user, 
-        money: (user.money || 0) + Reply.reward.money + bonusMoney, 
-        exp: (user.exp || 0) + Reply.reward.exp + bonusExp 
+      const updatedUser = await usersData.set(userID, {
+        money: (user.money || 0) + finalMoney,
+        exp: (user.exp || 0) + finalExp
       });
 
-      return message.reply(`✅ Correct! +$${Reply.reward.money + bonusMoney} | Acc: ${accuracy}%`);
+      return message.reply(`✅ 𝘾𝙊𝙍𝙍𝙀𝘾𝙏!\n𝙀𝘼𝙍𝙉𝙀𝘿: $${finalMoney.toLocaleString()}\n𝙀𝙓𝙋: +${finalExp}\n𝐂𝐔𝐑𝐑𝐄𝐍𝐓 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${updatedUser.money.toLocaleString()}`);
     } else {
-      const accuracy = Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
-      await usersData.set(userID, { ...user });
-      return message.reply(`❌ Wrong! Correct: ${Reply.correctAnswer}\nAcc: ${accuracy}%`);
+      // Logic for losing EXP on wrong answer (penalty is 20% of the reward EXP)
+      finalExp = Math.round(Reply.reward.exp * 0.20);
+      
+      const updatedUser = await usersData.set(userID, {
+        exp: Math.max(0, (user.exp || 0) - finalExp) // Prevent negative EXP
+      });
+
+      return message.reply(`𝙄𝙉𝘾𝙊𝙍𝙍𝙀𝘾𝙏\n𝙅𝙐𝙎𝙏𝙄𝙁𝙄𝘾𝘼𝙏𝙄𝙊𝙉: Correct was "${Reply.correctAnswer}"\n𝙀𝘼𝙍𝙉𝙀𝘿: $0\n𝙀𝙓𝙋: -${finalExp}\n𝐂𝐔𝐑𝐑𝐄𝐍𝐓 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${(user.money || 0).toLocaleString()}`);
     }
   }
 };
