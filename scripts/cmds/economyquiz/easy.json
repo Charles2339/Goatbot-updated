@@ -28,8 +28,7 @@
   {"question": "Selling goods to another country is called?", "options": ["Importing", "Exporting", "Bartering", "Trading"], "answer": "B"},
   {"question": "Which term describes 'hands-off' government in economics?", "options": ["Laissez-faire", "Socialism", "Command", "Regulated"], "answer": "A"},
   {"question": "A person who buys goods or services is a?", "options": ["Producer", "Consumer", "Wholesaler", "Retailer"], "answer": "B"},
-  {"question": "What is it called when people trade goods without money?", "options": ["Barter", "Selling", "Gifting", "Taxing"], "answer": "A"}
-  
+  {"question": "What is it called when people trade goods without money?", "options": ["Barter", "Selling", "Gifting", "Taxing"], "answer": "A"},  
   {"question": "What do we call money kept for future use?", "options": ["Spending", "Saving", "Lending", "Taxing"], "answer": "B"},
   {"question": "A business owned by one person is a?", "options": ["Corporation", "Partnership", "Sole Proprietorship", "Cooperative"], "answer": "C"},
   {"question": "What is the act of buying and selling called?", "options": ["Trading", "Saving", "Producing", "Budgeting"], "answer": "A"},

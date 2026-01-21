@@ -35,7 +35,7 @@ module.exports = {
       });
 
       const rewards = { easy: 500, mid: 1200, hard: 2300 };
-      const penalties = { easy: 200, mid: 300, hard: 700 };
+      const penalties = { easy: 20, mid: 50, hard: 100 };
 
       const msg = `💰 **ECONOMY QUIZ [${difficulty.toUpperCase()}]** 💰\n\nQuestion: ${random.question}\n\n${optionsMsg}\n━━━━━━━━━━━━━━━━━━\n✨ *Reply with A, B, C, or D*`;
 
@@ -72,7 +72,7 @@ module.exports = {
     if (userAnswer === correctAnswer) {
       const newMoney = (userData.money || 0) + reward;
       const newExp = (userData.exp || 0) + expGain;
-      
+
       await usersData.set(authorID, { money: newMoney, exp: newExp });
 
       return message.reply(`✅ **𝘾𝙊𝙍𝙍𝙀𝘾𝙏**\n\n𝙔𝙊𝙐 𝙀𝘼𝙍𝙉𝙀𝘿: $${reward} 💵\n𝙀𝙓𝙋 + ${expGain} ⏏️\n𝐍𝐄𝐖 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${newMoney.toLocaleString()}`);
@@ -80,7 +80,7 @@ module.exports = {
       const newMoney = Math.max(0, (userData.money || 0) - penalty);
       await usersData.set(authorID, { money: newMoney });
 
-      return message.reply(`❌ **𝙄𝙉𝘾𝙊𝙍𝙍𝙀𝘾𝙏**\n\n𝙏𝙝𝙚 𝙖𝙣𝙨𝙗𝙚𝙧 𝙬𝙖𝙨: ${correctAnswer}\n𝙔𝙊𝙐 𝙇𝙊𝙎𝙏: $${penalty} 📉\n𝐍𝐄𝐖 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${newMoney.toLocaleString()}`);
+      return message.reply(`❌ **𝙄𝙉𝘾𝙊𝙍𝙍𝙀𝘾𝙏**\n\n𝙏𝙝𝙚 𝙖𝙣𝙨𝙬𝙚𝙧 𝙬𝙖𝙨: ${correctAnswer}\n𝙔𝙊𝙐 𝙇𝙊𝙎𝙏: $${penalty} 📉\n𝐍𝐄𝐖 𝐁𝐀𝐋𝐀𝐍𝐂𝐄: $${newMoney.toLocaleString()}`);
     }
   }
 };
