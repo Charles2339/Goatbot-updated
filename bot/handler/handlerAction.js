@@ -6,78 +6,76 @@ const groupCooldowns = new Map();
 // --- RATE LIMITER END ---
 
 module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData) => {
-	const handlerEvents = require(process.env.NODE_ENV == 'development' ? "./handlerEvents.dev.js" : "./handlerEvents.js")(api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData);
+    const handlerEvents = require(process.env.NODE_ENV == 'development' ? "./handlerEvents.dev.js" : "./handlerEvents.js")(api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData);
 
-	return async function (event) {
-		if (
-			global.GoatBot.config.antiInbox == true &&
-			(event.senderID == event.threadID || event.userID == event.senderID || event.isGroup == false) &&
-			(event.senderID || event.userID || event.isGroup == false)
-		)
-			return;
+    return async function (event) {
+        // 1. IMMEDIATE RATE LIMIT CHECK
+        if (["message", "message_reply"].includes(event.type)) {
+            const threadID = event.threadID;
+            const now = Date.now();
 
-		const message = createFuncMessage(api, event);
+            if (!groupCooldowns.has(threadID) || now - groupCooldowns.get(threadID).lastReset > 60000) {
+                groupCooldowns.set(threadID, { count: 0, lastReset: now });
+            }
 
-		await handlerCheckDB(usersData, threadsData, event);
-		const handlerChat = await handlerEvents(event, message);
-		if (!handlerChat)
-			return;
+            const groupData = groupCooldowns.get(threadID);
 
-		const {
-			onAnyEvent, onFirstChat, onStart, onChat,
-			onReply, onEvent, handlerEvent, onReaction,
-			typ, presence, read_receipt
-		} = handlerChat;
+            if (groupData.count >= 10) {
+                // Return immediately so NO processing happens
+                return; 
+            }
+            groupData.count++;
+        }
 
-		// --- GLOBAL RATE LIMIT CHECK START ---
-		if (["message", "message_reply"].includes(event.type)) {
-			const threadID = event.threadID;
-			const now = Date.now();
+        // 2. EXISTING ANTI-INBOX LOGIC
+        if (
+            global.GoatBot.config.antiInbox == true &&
+            (event.senderID == event.threadID || event.userID == event.senderID || event.isGroup == false) &&
+            (event.senderID || event.userID || event.isGroup == false)
+        )
+            return;
 
-			if (!groupCooldowns.has(threadID) || now - groupCooldowns.get(threadID).lastReset > 60000) {
-				groupCooldowns.set(threadID, { count: 0, lastReset: now });
-			}
+        const message = createFuncMessage(api, event);
 
-			const groupData = groupCooldowns.get(threadID);
+        await handlerCheckDB(usersData, threadsData, event);
+        const handlerChat = await handlerEvents(event, message);
+        if (!handlerChat)
+            return;
 
-			if (groupData.count >= 10) {
-				// The bot stays silent if limit is reached to avoid more spam
-				// If you want a warning message, uncomment the line below:
-				// return api.sendMessage("⚠️ Group limit reached (10/min). Please slow down.", threadID);
-				return;
-			}
-			groupData.count++;
-		}
-		// --- GLOBAL RATE LIMIT CHECK END ---
+        const {
+            onAnyEvent, onFirstChat, onStart, onChat,
+            onReply, onEvent, handlerEvent, onReaction,
+            typ, presence, read_receipt
+        } = handlerChat;
 
-		onAnyEvent();
-		switch (event.type) {
-			case "message":
-			case "message_reply":
-			case "message_unsend":
-				onFirstChat();
-				onChat();
-				onStart();
-				onReply();
-				break;
-			case "event":
-				handlerEvent();
-				onEvent();
-				break;
-			case "message_reaction":
-				onReaction();
-				break;
-			case "typ":
-				typ();
-				break;
-			case "presence":
-				presence();
-				break;
-			case "read_receipt":
-				read_receipt();
-				break;
-			default:
-				break;
-		}
-	};
+        onAnyEvent();
+        switch (event.type) {
+            case "message":
+            case "message_reply":
+            case "message_unsend":
+                onFirstChat();
+                onChat();
+                onStart();
+                onReply();
+                break;
+            case "event":
+                handlerEvent();
+                onEvent();
+                break;
+            case "message_reaction":
+                onReaction();
+                break;
+            case "typ":
+                typ();
+                break;
+            case "presence":
+                presence();
+                break;
+            case "read_receipt":
+                read_receipt();
+                break;
+            default:
+                break;
+        }
+    };
 };
