@@ -7,7 +7,7 @@ module.exports = {
     version: "1.0",
     author: "CharlesMK",
     countDown: 5,
-    role: 1,               // ← change to 1 or 2 if you want to restrict to admins/mods only
+    role: 2,               // ← change to 1 or 2 if you want to restrict to admins/mods only
     description: {
       en: "Generate a random hentai image (NSFW)"
     },
