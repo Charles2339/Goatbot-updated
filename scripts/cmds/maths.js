@@ -1,7 +1,7 @@
 module.exports = {
   config: {
     name: "maths",
-    aliases: ["math", "quiz"],
+    aliases: ["math", "quiz maths"],
     version: "3.0",
     author: "CharlesMK",
     countDown: 3,
@@ -11,7 +11,7 @@ module.exports = {
     },
     category: "game",
     guide: {
-      en: "{pn} <difficulty>\nDifficulties: easy, mid, hard, hell\n\nExample: {pn} easy\n\nRewards:\n🟢 Easy: $500 + 25 EXP\n🟡 Mid: $1,250 + 62 EXP\n🟠 Hard: $2,500 + 100 EXP\n🔴 Hell: $10,000 + 500 EXP"
+      en: "{pn} <difficulty>\nDifficulties: easy, mid, hard, hell\n\nExample: {pn} easy\n\nRewards:\n� Easy: $500 + 25 EXP\n� Mid: $1,250 + 62 EXP\n� Hard: $2,500 + 100 EXP\n🔴 Hell: $10,000 + 500 EXP"
     }
   },
 
@@ -22,9 +22,9 @@ module.exports = {
       return message.reply(
         "📚 𝗠𝗔𝗧𝗛 𝗤𝗨𝗜𝗭\n\n" +
         "Choose a difficulty:\n" +
-        "🟢 +maths easy ($500 + 25 EXP)\n" +
-        "🟡 +maths mid ($1,250 + 62 EXP)\n" +
-        "🟠 +maths hard ($2,500 + 100 EXP)\n" +
+        "� +maths easy ($500 + 25 EXP)\n" +
+        "� +maths mid ($1,250 + 62 EXP)\n" +
+        "� +maths hard ($2,500 + 100 EXP)\n" +
         "🔴 +maths hell ($10,000 + 500 EXP)"
       );
     }
@@ -176,7 +176,7 @@ module.exports = {
       hell: 50 * 1000
     };
 
-    const emojis = { easy: "🟢", mid: "🟡", hard: "🟠", hell: "🔴" };
+    const emojis = { easy: "�", mid: "�", hard: "�", hell: "🔴" };
 
     if (!rewards[difficulty]) {
       return message.reply("❌ Invalid difficulty!");
@@ -216,7 +216,7 @@ module.exports = {
 
     // Check time limit
     const timeTaken = (Date.now() - data.timestamp) / 1000;
-    
+
     if (data.timeLimit > 0 && Date.now() - data.timestamp > data.timeLimit) {
       delete global.GoatBot.mathQuestions[senderID];
       return message.reply("⏰ Time's up! Try again.");
@@ -256,7 +256,7 @@ module.exports = {
 
       const totalExp = (user.exp || 0) + data.reward.exp;
       const totalMoney = (user.money || 0) + data.reward.money;
-      
+
       // Calculate accuracy
       const accuracy = Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
 
@@ -296,7 +296,7 @@ module.exports = {
       });
 
       message.reply(
-        `❌ 𝗪𝗥𝗢𝗡𝗚! 😔\n\n` +
+        `❌ 𝗪𝗥𝗢𝗡𝗚! \n\n` +
         `💭 𝗬𝗼𝘂𝗿 𝗔𝗻𝘀𝘄𝗲𝗿: ${userAnswer}\n` +
         `✅ 𝗖𝗼𝗿𝗿𝗲𝗰𝘁: ${data.answer}\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +

@@ -4,7 +4,7 @@ const path = require('path');
 module.exports = {
   config: {
     name: "economyquiz",
-    aliases: ["ecoquiz", "economy"],
+    aliases: ["ecoquiz", "economy", "quiz economy"],
     version: "3.0",
     author: "Charles MK",
     countDown: 5,
