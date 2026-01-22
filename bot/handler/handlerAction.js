@@ -1,36 +1,41 @@
 const createFuncMessage = global.utils.message;
 const handlerCheckDB = require("./handlerCheckData.js");
 
+// --- GLOBAL TRACKING ---
 const groupCooldowns = new Map();
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData) => {
     const handlerEvents = require(process.env.NODE_ENV == 'development' ? "./handlerEvents.dev.js" : "./handlerEvents.js")(api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData);
 
     return async function (event) {
-        const { threadID, senderID } = event;
+        const { threadID, senderID, type } = event;
 
         // 1. SILENT BAN CHECK (MongoDB)
-        const bannedUsers = await globalData.get("bannedUsers") || [];
-        if (bannedUsers.includes(senderID)) {
-            return; // EXIT IMMEDIATELY - No reply, no typing
+        try {
+            const bannedUsers = await globalData.get("bannedUsers") || [];
+            if (bannedUsers.includes(senderID)) return; 
+        } catch (e) {
+            // If DB fails, we log it but let the bot continue to avoid a crash
+            console.error("Ban check error:", e);
         }
 
-        // 2. RATE LIMIT & HUMAN-LIKE DELAY
-        if (["message", "message_reply"].includes(event.type)) {
+        // 2. RATE LIMITER (10 messages per minute per group)
+        if (["message", "message_reply"].includes(type)) {
             const now = Date.now();
             if (!groupCooldowns.has(threadID) || now - groupCooldowns.get(threadID).lastReset > 60000) {
                 groupCooldowns.set(threadID, { count: 0, lastReset: now });
             }
-            const groupData = groupCooldowns.get(threadID);
-            if (groupData.count >= 10) return;
-            groupData.count++;
 
+            const groupData = groupCooldowns.get(threadID);
+            if (groupData.count >= 10) return; // Ignore if over limit
+            
+            groupData.count++;
+            
+            // Turn on typing indicator to look human
             api.sendTypingIndicator(threadID);
-            await delay(Math.floor(Math.random() * 1000) + 1000); // 1-2s delay
         }
 
-        // 3. PROCEED TO COMMANDS
+        // 3. EXISTING CORE LOGIC
         if (
             global.GoatBot.config.antiInbox == true &&
             (event.senderID == event.threadID || event.userID == event.senderID || event.isGroup == false) &&
@@ -39,6 +44,7 @@ module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, user
             return;
 
         const message = createFuncMessage(api, event);
+
         await handlerCheckDB(usersData, threadsData, event);
         const handlerChat = await handlerEvents(event, message);
         if (!handlerChat) return;
@@ -50,7 +56,7 @@ module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, user
         } = handlerChat;
 
         onAnyEvent();
-        switch (event.type) {
+        switch (type) {
             case "message":
             case "message_reply":
             case "message_unsend":
