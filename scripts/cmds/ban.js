@@ -1,7 +1,7 @@
 module.exports = {
     config: {
         name: "ban",
-        version: "1.1.0",
+        version: "1.1.1",
         author: "Charles MK",
         countDown: 5,
         role: 2, // Admin only
@@ -18,18 +18,19 @@ module.exports = {
             return api.sendMessage("⚠️ Please provide a valid UID or mention the user.", threadID, messageID);
         }
 
-        // Get the current global ban list from MongoDB
+        // Fetch current list
         const currentData = await globalData.get("bannedUsers") || [];
+        let newData;
         
         if (currentData.includes(targetID)) {
-            // Unban logic
-            const newData = currentData.filter(id => id !== targetID);
-            await globalData.set("bannedUsers", newData);
+            newData = currentData.filter(id => id !== targetID);
+            // Fix: Wrap the array in an object for globalData.set
+            await globalData.set("bannedUsers", { bannedUsers: newData });
             return api.sendMessage(`✅ UID ${targetID} has been unbanned.`, threadID);
         } else {
-            // Ban logic
-            currentData.push(targetID);
-            await globalData.set("bannedUsers", currentData);
+            newData = [...currentData, targetID];
+            // Fix: Wrap the array in an object for globalData.set
+            await globalData.set("bannedUsers", { bannedUsers: newData });
             return api.sendMessage(`🤫 UID ${targetID} has been silently banned.`, threadID);
         }
     }
