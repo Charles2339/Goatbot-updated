@@ -6,8 +6,8 @@ module.exports = {
   config: {
     name: "pair",
     aliases: ["pairr", "ship"],
-    version: "1.1",
-    author: "Ncs Pro (updated for GoatBot)",
+    version: "1.2",
+    author: "Ncs Pro (updated for GoatBot - local bg)",
     role: 0,
     countDown: 10,
     shortDescription: {
@@ -23,7 +23,7 @@ module.exports = {
   },
 
   onStart: async function ({ api, event, args, usersData }) {
-    const pathImg = __dirname + "/cache/background.png";
+    const pathImg = __dirname + "/cache/pair_result.png";
     const pathAvt1 = __dirname + "/cache/Avtmot.png";
     const pathAvt2 = __dirname + "/cache/Avthai.png";
 
@@ -71,7 +71,7 @@ module.exports = {
 
     const id2 = candidates[Math.floor(Math.random() * candidates.length)];
 
-    // Get real user info (this is the fix!)
+    // Get real user info
     let info1, info2;
     try {
       info1 = await api.getUserInfo(id1);
@@ -84,41 +84,55 @@ module.exports = {
     const name1 = info1?.name || "You";
     const name2 = info2?.name || "Partner";
 
-    // Download avatars
-    async function downloadAvatar(userId, savePath, fallbackUrl) {
+    // Download avatars (still from FB)
+    async function downloadAvatar(userId, savePath) {
+      const fallbackUrl = `https://graph.facebook.com/${userId}/picture?type=large`;
+      let url = fallbackUrl;
+
       try {
-        let url = info1?.profilePicture || info2?.profilePicture || fallbackUrl;
-        if (!url) url = fallbackUrl;
-        const response = await axios.get(url, { responseType: "arraybuffer" });
+        // Prefer profilePicture from getUserInfo if available
+        if (info1 && userId === id1 && info1.profilePicture) url = info1.profilePicture;
+        if (info2 && userId === id2 && info2.profilePicture) url = info2.profilePicture;
+
+        const response = await axios.get(url, { responseType: "arraybuffer", timeout: 8000 });
         fs.writeFileSync(savePath, Buffer.from(response.data));
       } catch (err) {
         console.error(`Avatar download failed for ${userId}:`, err.message);
-        // Ultimate fallback: copy a default image if you have one
-        // fs.copyFileSync(__dirname + "/cache/default.png", savePath);
+        // You can add a default avatar fallback here later if wanted
       }
     }
 
-    await downloadAvatar(id1, pathAvt1, `https://graph.facebook.com/${id1}/picture?type=large`);
-    await downloadAvatar(id2, pathAvt2, `https://graph.facebook.com/${id2}/picture?type=large`);
+    await downloadAvatar(id1, pathAvt1);
+    await downloadAvatar(id2, pathAvt2);
 
-    // Random background
-    const backgrounds = [
-      "https://i.postimg.cc/wjJ29HRB/background1.png",
-      "https://i.postimg.cc/zf4Pnshv/background2.png",
-      "https://i.postimg.cc/5tXRQ46D/background3.png",
-    ];
-    const randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+    // ────────────────────────────────────────────────
+    // LOCAL BACKGROUND - only one file
+    // ────────────────────────────────────────────────
+    const localBgPath = __dirname + "/cache/love_background.jpg";  // ← change to .png if you saved PNG
 
     let bgData;
     try {
-      bgData = (await axios.get(randomBg, { responseType: "arraybuffer" })).data;
-      fs.writeFileSync(pathImg, Buffer.from(bgData));
+      if (!fs.existsSync(localBgPath)) {
+        throw new Error("Background file not found: " + localBgPath);
+      }
+      bgData = fs.readFileSync(localBgPath);
+      fs.writeFileSync(pathImg, bgData);
     } catch (err) {
-      console.error("Background download failed:", err);
-      return api.sendMessage("Failed to load background image", event.threadID, event.messageID);
+      console.error("Local background load failed:", err.message);
+
+      // Ultimate fallback: generate simple pink background
+      const canvasFallback = createCanvas(1280, 720);
+      const ctx = canvasFallback.getContext("2d");
+      ctx.fillStyle = "#ffb6c1"; // light pink
+      ctx.fillRect(0, 0, 1280, 720);
+      ctx.font = "bold 80px Arial";
+      ctx.fillStyle = "#ff69b4";
+      ctx.textAlign = "center";
+      ctx.fillText("Love 💕", 640, 360);
+      fs.writeFileSync(pathImg, canvasFallback.toBuffer());
     }
 
-    // Canvas magic
+    // Canvas compositing
     try {
       const baseImage = await loadImage(pathImg);
       const avt1 = await loadImage(pathAvt1);
@@ -135,23 +149,26 @@ module.exports = {
       fs.writeFileSync(pathImg, imageBuffer);
 
       // Random percentage
-      const percentages = [Math.floor(Math.random() * 100) + 1, "99.99", "101", "0.01", "-100", "0"];
+      const percentages = [
+        Math.floor(Math.random() * 100) + 1,
+        "99.99", "101", "0.01", "-100", "0"
+      ];
       const tile = percentages[Math.floor(Math.random() * percentages.length)];
 
-      // Send result
+      // Send
       await api.sendMessage({
-        body: `💞 Congratulations ${name1} successfully paired with ${name2}!\nCompatibility: ${tile}% 💕`,
+        body: `💞 ${name1} paired with ${name2}!\nCompatibility: ${tile}% 💕`,
         mentions: [{ tag: name2, id: id2 }],
         attachment: fs.createReadStream(pathImg)
       }, event.threadID, () => {
         fs.unlinkSync(pathImg);
-        fs.unlinkSync(pathAvt1);
-        fs.unlinkSync(pathAvt2);
+        if (fs.existsSync(pathAvt1)) fs.unlinkSync(pathAvt1);
+        if (fs.existsSync(pathAvt2)) fs.unlinkSync(pathAvt2);
       }, event.messageID);
 
     } catch (err) {
-      console.error("Canvas error:", err);
-      api.sendMessage("Something went wrong while creating the image 😭", event.threadID, event.messageID);
+      console.error("Canvas / send error:", err);
+      api.sendMessage("Failed to create the pair image 😭", event.threadID, event.messageID);
     }
   }
 };
