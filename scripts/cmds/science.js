@@ -40,7 +40,7 @@ module.exports = {
         statusMsg += `Streak: ${s.streak}/30\n\n`;
       });
       
-      statusMsg += "💡 *Use /science <difficulty> to play!*";
+      statusMsg += "💡 *Use +science <difficulty> to play!*";
       return message.reply(statusMsg);
     }
 
