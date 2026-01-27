@@ -1,7 +1,7 @@
 module.exports = {
   config: {
     name: "toprank",
-    version: "1.0",
+    version: "1.1",
     author: "Charles MK",
     countDown: 5,
     role: 0,
@@ -30,18 +30,18 @@ module.exports = {
     const top10 = sortedUsers.slice(0, 10);
     const totalUsers = allUsers.length;
 
-    let msg = `🏆 **TOP 10 RANKINGS**\n${"━".repeat(15)}\n\n`;
+    let msg = `✯TOP 10 RANKINGS✯ \n${"━".repeat(15)}\n\n`;
 
     top10.forEach((user, index) => {
       const level = expToLevel(user.exp);
       const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`;
       
-      msg += `${medal} **${user.name}**\n`;
-      msg += `╰┈➤ Level: **${level}** | Exp: **${user.exp.toLocaleString()}**\n\n`;
+      msg += `${medal} ${user.name}\n`;
+      msg += `╰┈➤ LEVEL: ${level} | EXP: ${user.exp.toLocaleString()}\n\n`;
     });
 
     msg += `${"━".repeat(15)}\n`;
-    msg += `👥 **Total Bot Users:** ${totalUsers.toLocaleString()}`;
+    msg += `TOTAL BOT USERS: ${totalUsers.toLocaleString()}`;
 
     return message.reply(msg);
   }
