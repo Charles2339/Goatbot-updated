@@ -2,13 +2,13 @@ module.exports = {
   config: {
     name: "editmoney",
     aliases: ["moneyadd", "moneyremove", "addmoney", "removemoney"],
-    version: "1.2",
+    version: "1.3",
     author: "Charles MK",
     countDown: 2,
-    role: 2, // Admin only - strictly restricted to prevent economy abuse
+    role: 2,
     description: { en: "Add or remove money from a user's balance." },
     category: "admin",
-    guide: { en: "{pn}add <uid | @tag | reply> <amount>\n{pn}remove <uid | @tag | reply> <amount>" }
+    guide: { en: "{pn} add [amount] | {pn} remove [amount]" }
   },
 
   onStart: async function ({ args, message, event, usersData }) {
@@ -28,18 +28,23 @@ module.exports = {
     // 2. Check if tagging someone
     else if (Object.keys(event.mentions).length > 0) {
       targetID = Object.keys(event.mentions)[0];
-      amountStr = args[args.length - 1]; // Amount is usually the last argument
+      amountStr = args[args.length - 1]; 
     }
-    // 3. Check if using UID
-    else if (args[1] && !isNaN(args[1])) {
+    // 3. Check if UID is provided (UIDs are usually long numbers)
+    else if (args[1] && args[1].length > 10 && !isNaN(args[1])) {
       targetID = args[1];
       amountStr = args[2];
+    }
+    // 4. Default to SENDER if only amount is provided
+    else {
+      targetID = event.senderID;
+      amountStr = args[1];
     }
 
     const amount = parseInt(amountStr?.replace(/,/g, ""));
 
-    if (!targetID || isNaN(amount) || amount <= 0) {
-      return message.reply("❌ **ERROR**\n\nPlease provide a valid user and a positive number amount.");
+    if (isNaN(amount) || amount <= 0) {
+      return message.reply("❌ **ERROR**\n\nPlease provide a positive number amount.\n\nExample: **+money add 50000**");
     }
 
     try {
@@ -59,12 +64,11 @@ module.exports = {
       }
 
       await usersData.set(targetID, { money: newBalance });
-
-      const targetName = userData.name || targetID;
+      const targetName = userData.name || "User";
       
       return message.reply(
         `${statusIcon} **ECONOMY UPDATE**\n\n` +
-        `User: **${targetName}**\n` +
+        `Target: **${targetName}**\n` +
         `Action: **${action.toUpperCase()}**\n` +
         `Amount: **$${amount.toLocaleString()}**\n\n` +
         `New Balance: **$${newBalance.toLocaleString()}**`
