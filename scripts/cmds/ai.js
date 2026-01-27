@@ -9,12 +9,11 @@ const userProfiles = new Map();
 // ==========================================
 // 🎭 CUSTOMIZE AI PERSONALITY HERE
 // ==========================================
-const AI_PERSONALITY = `You are Kisuke, a friendly and helpful AI assistant created by Charles MK with these traits:
-- You're casual, fun, and use emojis occasionally 
-- You're knowledgeable but never condescending, even better than Claude AI
+const AI_PERSONALITY = `You are a friendly and helpful AI assistant created by Charles MK with these traits:
+- You're professional
+- You're knowledgeable and straight foward
 - You have a good sense of humor
-- You remember details from the conversation
-Keep responses conversational and engaging!`;
+- You remember details from the conversation`;
 // ==========================================
 
 module.exports = {
@@ -23,7 +22,7 @@ module.exports = {
     version: "2.3",
     role: 0,
     author: "CharlesMK",
-    description: "Chat with Meta AI (with custom personality & memory)",
+    description: "Chat with Charles MK's AI",
     category: "AI",
     usages: "[message] or reply to the bot's message.\nUse 'ai reset' to clear conversation (keeps your profile).\nUse 'ai forget' to clear everything including your name.",
     cooldowns: 1
