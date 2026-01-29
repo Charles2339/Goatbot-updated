@@ -1,4 +1,4 @@
-const fs = require("fs");
+/*const fs = require("fs");
 const path = require("path");
 
 global.rpgBattles = global.rpgBattles || new Map();
@@ -148,4 +148,4 @@ async function getOrInitStats(userID, usersData) {
 async function startBattle(api, p1ID, p2ID, p1, p2, threadID) {
     global.rpgBattles.set(`${threadID}_battle`, { p1: {...p1, id: p1ID}, p2: {...p2, id: p2ID}, turn: p1ID });
     api.sendMessage(`🥊 𝗙𝗜𝗚𝗛𝗧 𝗕𝗘𝗚𝗜𝗡𝗦!\n👉 ${p1.name}, enter your move!`, threadID);
-}
+}*/
