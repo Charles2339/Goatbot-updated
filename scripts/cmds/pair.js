@@ -6,9 +6,9 @@ const path = require("path");
 module.exports = {
   config: {
     name: "pair",
-    author: "Ew'r Saim X Ariyan",
+    author: "Ew'r Saim X Ariyan and Charles MK",
     category: "love",
-    version: "2.8"
+    version: "5.0"
   },
 
   onStart: async function ({ api, event, usersData }) {
@@ -30,64 +30,67 @@ module.exports = {
       const canvas = createCanvas(800, 400);
       const ctx = canvas.getContext("2d");
 
-      // 1. Draw Background
+      // 1. Load Background
       const background = await loadImage("https://i.postimg.cc/pdv5dFVX/611905695-855684437229208-8377464727643815456-n.png");
       ctx.drawImage(background, 0, 0, 800, 400);
 
-      // 2. Load PFPs
+      // 2. Load Avatars
       const avt1 = await loadImage(`https://graph.facebook.com/${senderID}/picture?width=512&height=512&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`);
       const avt2 = await loadImage(`https://graph.facebook.com/${matchID}/picture?width=512&height=512&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`);
 
-      // 3. Draw PFPs in the Floral Frame positions
-      // Position for Frame 1 (Top Circle)
-      const x1 = 575, y1 = 65, size1 = 155;
+      const radius = 88;
+
+      // --- UPPER FRAME (Your PFP) ---
+      const upperCenterX = 469;
+      const upperCenterY = 126;
+
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x1 + size1/2, y1 + size1/2, size1/2, 0, Math.PI * 2);
+      ctx.arc(upperCenterX, upperCenterY, radius, 0, Math.PI * 2);
       ctx.clip();
-      ctx.drawImage(avt1, x1, y1, size1, size1);
+      ctx.drawImage(avt1, upperCenterX - radius, upperCenterY - radius, radius * 2, radius * 2);
       ctx.restore();
 
-      // Position for Frame 2 (Bottom Circle)
-      const x2 = 825, y2 = 535, size2 = 155; 
-      // Note: If the image is 800px wide, the second frame is actually partially cut off or small.
-      // Based on your image, let's use these relative coordinates:
-      const frameTopX = 578, frameTopY = 68;      // Center of top flower
-      const frameBottomX = 840, frameBottomY = 540; // Center of bottom flower (approx)
+      // --- LOWER FRAME (Match PFP) ---
+      const lowerCenterX = 673;
+      const lowerCenterY = 275;
 
-      // Let's adjust to fit standard 800x400 canvas scale:
-      // Avatar 1 (Top Flower)
-      drawCirclePfp(ctx, avt1, 578, 68, 75); 
-      // Avatar 2 (Bottom Flower)
-      drawCirclePfp(ctx, avt2, 840, 545, 75); 
-
-      function drawCirclePfp(context, img, x, y, radius) {
-        context.save();
-        context.beginPath();
-        context.arc(x, y, radius, 0, Math.PI * 2);
-        context.clip();
-        context.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
-        context.restore();
-      }
-
-      // 4. Name Labels
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 18px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(allUsers[senderID].name, 578, 165);
-      ctx.fillText(allUsers[matchID].name, 840, 640);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(lowerCenterX, lowerCenterY, radius, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(avt2, lowerCenterX - radius, lowerCenterY - radius, radius * 2, radius * 2);
+      ctx.restore();
 
       if (!fs.existsSync(path.join(__dirname, "cache"))) fs.mkdirSync(path.join(__dirname, "cache"));
       fs.writeFileSync(cachePath, canvas.toBuffer());
 
+      // Generate match percentage
+      const matchPercentage = Math.floor(Math.random() * 30) + 70; // Random between 70-99%
+
+      // Array of romantic messages
+      const messages = [
+        `💕 Perfect Match Found! 💕\n━━━━━━━━━━━━━━━━━\n👤 ${allUsers[senderID].name}\n💖 ${matchPercentage}% Compatible 💖\n👤 ${allUsers[matchID].name}\n━━━━━━━━━━━━━━━━━\n✨ Love is in the air! ✨`,
+        
+        `💘 Cupid's Arrow Has Struck! 💘\n━━━━━━━━━━━━━━━━━\n${allUsers[senderID].name} 💞 ${allUsers[matchID].name}\n\n💯 Match Score: ${matchPercentage}%\n━━━━━━━━━━━━━━━━━\n🌹 A beautiful connection! 🌹`,
+        
+        `💓 Soulmate Alert! 💓\n━━━━━━━━━━━━━━━━━\n${allUsers[senderID].name}\n❤️ & ❤️\n${allUsers[matchID].name}\n\n✨ Compatibility: ${matchPercentage}% ✨\n━━━━━━━━━━━━━━━━━\nDestiny has spoken! 💫`,
+        
+        `🌸 Love Blossoms! 🌸\n━━━━━━━━━━━━━━━━━\n💝 ${allUsers[senderID].name}\n💕 perfectly matched with\n💝 ${allUsers[matchID].name}\n\n🎯 ${matchPercentage}% Love Score!\n━━━━━━━━━━━━━━━━━`,
+      ];
+
+      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+
       return api.sendMessage({
-        body: `💓 𝐌𝐚𝐭𝐜𝐡 𝐅𝐨𝐮𝐧𝐝!\n${allUsers[senderID].name} x ${allUsers[matchID].name}`,
+        body: randomMessage,
         attachment: fs.createReadStream(cachePath)
-      }, threadID, () => fs.unlinkSync(cachePath), messageID);
+      }, threadID, () => {
+        if (fs.existsSync(cachePath)) fs.unlinkSync(cachePath);
+      }, messageID);
 
     } catch (err) {
       console.error(err);
-      return api.sendMessage("❌ Error placing avatars. Check console.", threadID, messageID);
+      return api.sendMessage("❌ Error during pairing. Ensure 'canvas' is installed.", threadID, messageID);
     }
   }
 };
