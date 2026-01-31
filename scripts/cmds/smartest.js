@@ -1,89 +1,53 @@
 module.exports = {
   config: {
     name: "smartest",
-    aliases: ["smart", "topexp", "brainy"],
-    version: "1.0",
-    author: "CharlesMK",
+    aliases: ["quiztop", "qtop"],
+    version: "1.0.0",
+    author: "Charles MK",
     countDown: 5,
     role: 0,
-    description: {
-      en: "Display the top 10 smartest users (by EXP)"
-    },
+    description: "View the lifetime quiz leaderboard and accuracy rankings.",
     category: "game",
-    guide: {
-      en: "{pn}\nShows the top 10 users with the most EXP from answering math questions"
-    }
+    guide: { en: "{pn}" }
   },
 
-  onStart: async function ({ message, usersData, event, api }) {
+  onStart: async function ({ message, usersData }) {
     try {
-      // Get all users data
       const allUsers = await usersData.getAll();
 
-      // Filter and sort users by EXP
-      const smartestUsers = allUsers
-        .filter(user => user.exp !== undefined && user.exp > 0)
-        .sort((a, b) => b.exp - a.exp)
-        .slice(0, 10);
+      // Filter users who have played the quiz and have at least 1 point
+      const quizPlayers = allUsers
+        .filter(u => u.data && u.data.quizScore > 0)
+        .sort((a, b) => b.data.quizScore - a.data.quizScore);
 
-      if (smartestUsers.length === 0) {
-        return message.reply("❌ No users have earned EXP yet!\n\nPlay +maths to start earning EXP! 🧠");
+      if (quizPlayers.length === 0) {
+        return message.reply("🏆 𝗦𝗠𝗔𝗥𝗧𝗘𝗦𝗧 𝗟𝗘𝗔𝗗𝗘𝗥𝗕𝗢𝗔𝗥𝗗\n━━━━━━━━━━━━━━━━━━━━━━\nNo data found. Start playing with +quiz!");
       }
 
-      // Build the leaderboard message
-      let leaderboard = "🧠 𝗧𝗢𝗣 𝟭𝟬 𝗦𝗠𝗔𝗥𝗧𝗘𝗦𝗧 𝗨𝗦𝗘𝗥𝗦 🧠\n";
-      leaderboard += "━━━━━━━━━━━━━━━━━━━━\n\n";
+      let msg = "🧠 𝗦𝗠𝗔𝗥𝗧𝗘𝗦𝗧 𝗣𝗟𝗔𝗬𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n";
 
-      for (let i = 0; i < smartestUsers.length; i++) {
-        const user = smartestUsers[i];
-        const rank = i + 1;
+      quizPlayers.slice(0, 10).forEach((user, index) => {
+        const score = user.data.quizScore || 0;
+        const total = user.data.quizTotal || 0;
+        const correct = user.data.quizCorrect || 0;
         
-        // Medal emojis for top 3
-        let medal = "";
-        if (rank === 1) medal = "🥇";
-        else if (rank === 2) medal = "🥈";
-        else if (rank === 3) medal = "🥉";
-        else medal = `${rank}.`;
+        // Calculate lifetime accuracy
+        const accuracy = total > 0 ? ((correct / total) * 100).toFixed(1) : 0;
+        
+        // Use a crown for the top player
+        const medal = index === 0 ? "👑" : `${index + 1}.`;
 
-        // Get user info
-        let userName = "Unknown User";
-        try {
-          const userInfo = await api.getUserInfo(user.userID);
-          userName = userInfo[user.userID]?.name || "Unknown User";
-        } catch (error) {
-          userName = "Unknown User";
-        }
+        msg += `${medal} **${user.name}**\n`;
+        msg += `   ✨ 𝗣𝗼𝗶𝗻𝘁𝘀: ${score.toLocaleString()}\n`;
+        msg += `   🎯 𝗔𝗰𝗰𝘂𝗿𝗮𝗰𝘆: ${accuracy}%\n\n`;
+      });
 
-        // Format EXP with commas
-        const formattedExp = user.exp.toLocaleString();
-
-        // Check if this is the current user
-        const isCurrentUser = user.userID === event.senderID;
-        const indicator = isCurrentUser ? " 👈 (You)" : "";
-
-        leaderboard += `${medal} ${userName}${indicator}\n`;
-        leaderboard += `   ⭐ ${formattedExp} EXP\n\n`;
-      }
-
-      // Check if current user is in top 10, if not show their rank
-      const currentUserIndex = allUsers
-        .filter(user => user.exp !== undefined && user.exp > 0)
-        .sort((a, b) => b.exp - a.exp)
-        .findIndex(user => user.userID === event.senderID);
-
-      if (currentUserIndex > 9 && currentUserIndex !== -1) {
-        const currentUser = allUsers.find(user => user.userID === event.senderID);
-        const formattedExp = (currentUser.exp || 0).toLocaleString();
-        leaderboard += `━━━━━━━━━━━━━━━━━━━━\n`;
-        leaderboard += `📍 Your Rank: #${currentUserIndex + 1}\n`;
-        leaderboard += `📊 Your EXP: ${formattedExp}`;
-      }
-
-      return message.reply(leaderboard);
-
+      msg += "━━━━━━━━━━━━━━━━━━━━━━\nKeep playing to climb the ranks!";
+      
+      return message.reply(msg);
     } catch (error) {
-      console.error("Error in smartest command:", error);
-      return message.reply("❌ An error occurred while fetching the leaderboard. Please try again.");
+      console.error(error);
+      return message.reply("❌ Unable to fetch the leaderboard at this time.");
     }
   }
 };
