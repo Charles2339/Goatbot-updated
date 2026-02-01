@@ -18,7 +18,7 @@ module.exports = {
     try {
       const threadInfo = await api.getThreadInfo(threadID);
       const participantIDs = threadInfo.participantIDs.filter(id => id !== senderID && id !== api.getCurrentUserID());
-      
+
       if (participantIDs.length === 0) return api.sendMessage("❌ Need more members!", threadID, messageID);
 
       const allUsers = await api.getUserInfo([...participantIDs, senderID]);
@@ -41,8 +41,8 @@ module.exports = {
       const radius = 88;
 
       // --- UPPER FRAME (Your PFP) ---
-      const upperCenterX = 469;
-      const upperCenterY = 126;
+      const upperCenterX = 471;
+      const upperCenterY = 124;
 
       ctx.save();
       ctx.beginPath();
@@ -53,7 +53,7 @@ module.exports = {
 
       // --- LOWER FRAME (Match PFP) ---
       const lowerCenterX = 673;
-      const lowerCenterY = 275;
+      const lowerCenterY = 276;
 
       ctx.save();
       ctx.beginPath();
@@ -71,11 +71,11 @@ module.exports = {
       // Array of romantic messages
       const messages = [
         `💕 Perfect Match Found! 💕\n━━━━━━━━━━━━━━━━━\n👤 ${allUsers[senderID].name}\n💖 ${matchPercentage}% Compatible 💖\n👤 ${allUsers[matchID].name}\n━━━━━━━━━━━━━━━━━\n✨ Love is in the air! ✨`,
-        
+
         `💘 Cupid's Arrow Has Struck! 💘\n━━━━━━━━━━━━━━━━━\n${allUsers[senderID].name} 💞 ${allUsers[matchID].name}\n\n💯 Match Score: ${matchPercentage}%\n━━━━━━━━━━━━━━━━━\n🌹 A beautiful connection! 🌹`,
-        
+
         `💓 Soulmate Alert! 💓\n━━━━━━━━━━━━━━━━━\n${allUsers[senderID].name}\n❤️ & ❤️\n${allUsers[matchID].name}\n\n✨ Compatibility: ${matchPercentage}% ✨\n━━━━━━━━━━━━━━━━━\nDestiny has spoken! 💫`,
-        
+
         `🌸 Love Blossoms! 🌸\n━━━━━━━━━━━━━━━━━\n💝 ${allUsers[senderID].name}\n💕 perfectly matched with\n💝 ${allUsers[matchID].name}\n\n🎯 ${matchPercentage}% Love Score!\n━━━━━━━━━━━━━━━━━`,
       ];
 
