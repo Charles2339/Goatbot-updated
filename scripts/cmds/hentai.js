@@ -3,40 +3,89 @@ const axios = require("axios");
 module.exports = {
   config: {
     name: "hentai",
-    aliases: ["nsfw", "lewds", "ecchi", "porn"],
-    version: "1.1",
-    author: "CharlesMK (enhanced)",
-    countDown: 8,
-    role: 2,  // ← set to 1 or 2 if you want to restrict it
+    aliases: ["nsfw", "lewds", "ecchi", "porn", "hent"],
+    version: "1.3",
+    author: "Charles MK",
+    countDown: 12,
+    role: 2,                // keep as-is or change to 0/1 if desired
     description: {
-      en: "Generate random hentai image(s) (NSFW) - +hentai [1-5]"
+      en: "Generate random hentai image(s) with optional tag/genre (NSFW)"
     },
     category: "NSFW",
     guide: {
-      en: "{pn} [number]\nExample: {pn} → 1 image\n         {pn} 3 → 3 images (max 5)"
+      en: "{pn} [number] [tag/genre]\n" +
+          "Examples:\n" +
+          "  {pn} 8                  → 8 random hentai\n" +
+          "  {pn} 5 milf            → 5 milf-themed\n" +
+          "  {pn} 10 big_breasts anal → 10 images with both tags\n" +
+          "Max images: 15 (Messenger limit)\n" +
+          "Common tags: milf, anal, big_breasts, blowjob, creampie, schoolgirl, yuri, yaoi, tentacles, etc."
     }
   },
 
   onStart: async function ({ message, args }) {
     try {
       let num = 1;
+      let tags = ["hentai"]; // default
+
+      // Parse arguments
       if (args.length > 0) {
-        num = parseInt(args[0], 10);
-        if (isNaN(num) || num < 1) num = 1;
-        if (num > 5) num = 5;
+        // First arg → number if it's numeric
+        const first = parseInt(args[0], 10);
+        if (!isNaN(first) && first >= 1) {
+          num = first;
+          args.shift(); // remove the number from args
+        }
+
+        // Cap number
+        if (num > 15) {
+          num = 15;
+          await message.reply("⚠️ Max 15 images due to Messenger limits. Using 15.");
+        }
+
+        // Remaining args → tags (space-separated)
+        if (args.length > 0) {
+          tags = args.map(t => t.trim().toLowerCase());
+        }
       }
 
-      await message.reply(`🔞 Fetching \( {num} naughty image \){num > 1 ? 's' : ''}... 🍑💦`);
+      const tagString = tags.join(", ");
+      await message.reply(`🔞 Fetching \( {num} image \){num > 1 ? 's' : ''} (${tagString})... 🍑💦`);
 
       const images = [];
-      // waifu.im supports multiple via many=true + limit, but let's do safe loop
-      for (let i = 0; i < num; i++) {
-        const res = await axios.get(
-          "https://api.waifu.im/search?included_tags=hentai&height>=512&is_nsfw=true&many=false"
-        );
+
+      // Try bulk request with tags
+      let remaining = num;
+      try {
+        const bulkUrl = `https://api.waifu.im/search?` +
+                        `included_tags=${encodeURIComponent(tags.join(','))}` +
+                        `&height>=512&is_nsfw=true&many=true&limit=${num}`;
+
+        const bulkRes = await axios.get(bulkUrl);
+
+        if (bulkRes.data?.images?.length > 0) {
+          for (const img of bulkRes.data.images) {
+            if (images.length >= num) break;
+            const imgStream = await axios.get(img.url, { responseType: "stream" });
+            images.push(imgStream.data);
+            remaining--;
+          }
+        }
+      } catch (bulkErr) {
+        console.log("Bulk fetch failed:", bulkErr.message);
+        // fallback to single fetches
+      }
+
+      // Fallback: single fetches with the same tags
+      while (images.length < num) {
+        const singleUrl = `https://api.waifu.im/search?` +
+                          `included_tags=${encodeURIComponent(tags.join(','))}` +
+                          `&height>=512&is_nsfw=true&many=false`;
+
+        const res = await axios.get(singleUrl);
 
         if (!res.data?.images?.[0]?.url) {
-          throw new Error("No image returned");
+          throw new Error("No image returned from API");
         }
 
         const imageUrl = res.data.images[0].url;
@@ -44,15 +93,26 @@ module.exports = {
         images.push(imgStream.data);
       }
 
-      // Try to send all in one message (most frameworks support array of streams)
+      // Send result
       await message.reply({
-        body: `🔞 𝗛𝗘𝗡𝗧𝗔𝗜 𝗚𝗘𝗡𝗘𝗥𝗔𝗧𝗘𝗗! (\( {num} image \){num > 1 ? 's' : ''})\nEnjoy~ 🍆💦 (NSFW)`,
-        attachment: images  // array of streams → many bots send as album/carousel
+        body: `🔞 **HENTAI GENERATED!** (\( {images.length} image \){images.length !== 1 ? 's' : ''})` +
+              `\nTags: ${tagString}\nEnjoy~ 🍆💦 (NSFW 18+)`,
+        attachment: images
       });
 
     } catch (err) {
-      console.error(err?.response?.data || err);
-      await message.reply("❌ Failed to fetch hentai. API issue or rate limit – try again soon.");
+      console.error("Hentai fetch error:", err?.response?.data || err?.message || err);
+
+      let errorMsg = "❌ Failed to fetch images.";
+      if (err?.response?.status === 404 || err?.response?.status === 400) {
+        errorMsg += "\nInvalid tag(s) or no results for that combination.";
+      } else if (err?.response?.status === 429) {
+        errorMsg += "\nRate limited – wait a minute and try again.";
+      } else {
+        errorMsg += "\nAPI might be down or too many requested.";
+      }
+
+      await message.reply(errorMsg + "\nTry fewer images or different tags.");
     }
   }
 };
