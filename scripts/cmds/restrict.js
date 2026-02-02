@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "restrict",
     aliases: ["unrestrict", "restricted"],
-    version: "2.0",
+    version: "2.1",
     author: "Charles MK",
     countDown: 5,
     role: 2,
@@ -13,14 +13,14 @@ module.exports = {
           "{pn} {command} - Make command admin-only\n" +
           "unrestrict @user {command} - Unblock user from command\n" +
           "unrestrict {command} - Remove admin-only restriction\n" +
-          "restricted commands - Show all restrictions"
+          "restricted - Show all restrictions"
     }
   },
 
   onStart: async function ({ api, event, message, args, usersData, threadsData, commandName }) {
     const { threadID, messageReply, mentions } = event;
     const isUnrestrict = commandName === "unrestrict";
-    const isListCommands = commandName === "restricted" || (args[0] === "commands");
+    const isListCommands = commandName === "restricted";
 
     // 1. List all restrictions
     if (isListCommands) {
@@ -113,7 +113,7 @@ module.exports = {
         return message.reply(`✅ 𝖴𝗇𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 ${userName} 𝖿𝗋𝗈𝗆 ${targetCommand}`);
       } else {
         // Remove admin-only restriction
-        if (!restrictions.global.includes(targetCommand)) {
+        if (!restrictions.global || !restrictions.global.includes(targetCommand)) {
           return message.reply(`⚠️ ${targetCommand} 𝗂𝗌 𝗇𝗈𝗍 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 𝗍𝗈 𝖺𝖽𝗆𝗂𝗇𝗌`);
         }
 
@@ -142,6 +142,10 @@ module.exports = {
       return message.reply(`🚫 𝖱𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 ${userName} 𝖿𝗋𝗈𝗆 ${targetCommand}`);
     } else {
       // Restrict command to admins only
+      if (!restrictions.global) {
+        restrictions.global = [];
+      }
+
       if (restrictions.global.includes(targetCommand)) {
         return message.reply(`⚠️ ${targetCommand} 𝗂𝗌 𝖺𝗅𝗋𝖾𝖺𝖽𝗒 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 𝗍𝗈 𝖺𝖽𝗆𝗂𝗇𝗌`);
       }
