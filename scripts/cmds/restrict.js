@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "restrict",
     aliases: ["unrestrict", "restricted"],
-    version: "2.1",
+    version: "2.2",
     author: "Charles MK",
     countDown: 5,
     role: 2,
@@ -25,12 +25,19 @@ module.exports = {
     // 1. List all restrictions
     if (isListCommands) {
       const threadData = await threadsData.get(threadID);
-      const restrictions = threadData.data?.restrictions || { users: {}, global: [] };
+      
+      // Initialize if doesn't exist
+      if (!threadData.data) threadData.data = {};
+      if (!threadData.data.restrictions) {
+        threadData.data.restrictions = { users: {}, global: [] };
+      }
+      
+      const restrictions = threadData.data.restrictions;
 
       let response = "🚫 𝗖𝗨𝗥𝗥𝗘𝗡𝗧 𝗥𝗘𝗦𝗧𝗥𝗜𝗖𝗧𝗜𝗢𝗡𝗦\n━━━━━━━━━━━━━━━━━━\n\n";
 
       // Admin-only commands
-      if (restrictions.global?.length > 0) {
+      if (restrictions.global && restrictions.global.length > 0) {
         response += "👑 𝗔𝗱𝗺𝗶𝗻-𝗢𝗻𝗹𝘆 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀:\n";
         restrictions.global.forEach(cmd => response += `   • ${cmd}\n`);
         response += "\n";
@@ -45,7 +52,7 @@ module.exports = {
           const userName = await usersData.getName(userID);
           const commands = restrictions.users[userID];
           
-          if (commands.length > 0) {
+          if (commands && commands.length > 0) {
             response += `👤 ${userName}:\n`;
             commands.forEach(cmd => response += `   • ${cmd}\n`);
             response += "\n";
@@ -53,7 +60,7 @@ module.exports = {
         }
       }
 
-      if (restrictions.global?.length === 0 && userIDs.length === 0) {
+      if ((!restrictions.global || restrictions.global.length === 0) && userIDs.length === 0) {
         response += "✅ 𝖭𝗈 𝖺𝖼𝗍𝗂𝗏𝖾 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝗂𝗈𝗇𝗌";
       }
 
@@ -97,7 +104,7 @@ module.exports = {
     if (isUnrestrict) {
       if (targetID) {
         // Unrestrict user from command
-        if (!restrictions.users[targetID] || !restrictions.users[targetID].includes(targetCommand)) {
+        if (!restrictions.users || !restrictions.users[targetID] || !restrictions.users[targetID].includes(targetCommand)) {
           return message.reply(`⚠️ 𝖴𝗌𝖾𝗋 𝗂𝗌 𝗇𝗈𝗍 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 𝖿𝗋𝗈𝗆 ${targetCommand}`);
         }
 
@@ -108,7 +115,7 @@ module.exports = {
         }
 
         const userName = await usersData.getName(targetID);
-        await threadsData.set(threadID, threadData);
+        await threadsData.set(threadID, { data: threadData.data });
         
         return message.reply(`✅ 𝖴𝗇𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 ${userName} 𝖿𝗋𝗈𝗆 ${targetCommand}`);
       } else {
@@ -118,7 +125,7 @@ module.exports = {
         }
 
         restrictions.global = restrictions.global.filter(cmd => cmd !== targetCommand);
-        await threadsData.set(threadID, threadData);
+        await threadsData.set(threadID, { data: threadData.data });
         
         return message.reply(`🔓 ${targetCommand} 𝗂𝗌 𝗇𝗈𝗐 𝖺𝗏𝖺𝗂𝗅𝖺𝖻𝗅𝖾 𝗍𝗈 𝖾𝗏𝖾𝗋𝗒𝗈𝗇𝖾`);
       }
@@ -127,6 +134,7 @@ module.exports = {
     // 5. Handle restrict
     if (targetID) {
       // Restrict user from command
+      if (!restrictions.users) restrictions.users = {};
       if (!restrictions.users[targetID]) {
         restrictions.users[targetID] = [];
       }
@@ -136,22 +144,20 @@ module.exports = {
       }
 
       restrictions.users[targetID].push(targetCommand);
-      await threadsData.set(threadID, threadData);
+      await threadsData.set(threadID, { data: threadData.data });
 
       const userName = await usersData.getName(targetID);
       return message.reply(`🚫 𝖱𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 ${userName} 𝖿𝗋𝗈𝗆 ${targetCommand}`);
     } else {
       // Restrict command to admins only
-      if (!restrictions.global) {
-        restrictions.global = [];
-      }
+      if (!restrictions.global) restrictions.global = [];
 
       if (restrictions.global.includes(targetCommand)) {
         return message.reply(`⚠️ ${targetCommand} 𝗂𝗌 𝖺𝗅𝗋𝖾𝖺𝖽𝗒 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 𝗍𝗈 𝖺𝖽𝗆𝗂𝗇𝗌`);
       }
 
       restrictions.global.push(targetCommand);
-      await threadsData.set(threadID, threadData);
+      await threadsData.set(threadID, { data: threadData.data });
       
       return message.reply(`👑 ${targetCommand} 𝗂𝗌 𝗇𝗈𝗐 𝖺𝖽𝗆𝗂𝗇-𝗈𝗇𝗅𝗒`);
     }

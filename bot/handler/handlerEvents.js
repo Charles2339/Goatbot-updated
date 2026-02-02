@@ -132,13 +132,15 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 
                 // --- RESTRICTION CHECK (Only for Commands) ---
                 if (isGroup && !["restrict", "unrestrict", "restricted"].includes(commandName)) {
-                    const res = threadData.data.restrictions;
-                    if (res) {
-                        if (res.global && res.global.includes(commandName) && role < 2) {
-                            return await message.reply(`👑 | **'${commandName}'** is restricted to Bot Admins.`);
+                    const restrictions = threadData.data?.restrictions;
+                    if (restrictions) {
+                        // Check if command is admin-only
+                        if (restrictions.global && restrictions.global.includes(commandName) && role < 2) {
+                            return await message.reply(`👑 ${commandName} 𝗂𝗌 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 𝗍𝗈 𝖺𝖽𝗆𝗂𝗇𝗌 𝗈𝗇𝗅𝗒`);
                         }
-                        if (res.users && res.users[senderID] && res.users[senderID].includes(commandName)) {
-                            return await message.reply(`🚫 | You are restricted from using **'${commandName}'**.`);
+                        // Check if user is banned from command
+                        if (restrictions.users && restrictions.users[senderID] && restrictions.users[senderID].includes(commandName)) {
+                            return await message.reply(`🚫 𝖸𝗈𝗎 𝖺𝗋𝖾 𝗋𝖾𝗌𝗍𝗋𝗂𝖼𝗍𝖾𝖽 𝖿𝗋𝗈𝗆 𝗎𝗌𝗂𝗇𝗀 ${commandName}`);
                         }
                     }
                 }
@@ -156,7 +158,9 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        // --- These functions handle replies and ongoing interactions ---
+        // —————————————————————————————————————————————— //
+        //                     ON REPLY                   //
+        // —————————————————————————————————————————————— //
         async function onReply() {
             if (!event.messageReply) return;
             const { onReply } = GoatBot;
@@ -177,11 +181,95 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        async function onChat() { /* Implementation remains the same */ }
-        async function onReaction() { /* Implementation remains the same */ }
-        async function onAnyEvent() { /* Implementation remains the same */ }
-        async function handlerEvent() { /* Implementation remains the same */ }
-        async function onEvent() { /* Implementation remains the same */ }
+        // —————————————————————————————————————————————— //
+        //                     ON CHAT                    //
+        // —————————————————————————————————————————————— //
+        async function onChat() {
+            const { onChat } = GoatBot;
+            for (const [key, command] of onChat) {
+                if (!command || !command.onChat) continue;
+                
+                const roleConfig = getRoleConfig(utils, command, isGroup, threadData, key);
+                if (roleConfig.onChat > role) continue;
+
+                try {
+                    await command.onChat({ ...parameters, commandName: key });
+                } catch (err) {
+                    log.err("onChat", err);
+                }
+            }
+        }
+
+        // —————————————————————————————————————————————— //
+        //                   ON REACTION                  //
+        // —————————————————————————————————————————————— //
+        async function onReaction() {
+            const { onReaction } = GoatBot;
+            const Reaction = onReaction.get(event.messageID);
+            if (!Reaction) return;
+
+            const command = GoatBot.commands.get(Reaction.commandName);
+            if (!command) return;
+
+            const roleConfig = getRoleConfig(utils, command, isGroup, threadData, Reaction.commandName);
+            if (roleConfig.onReaction > role) return;
+
+            try {
+                await command.onReaction({ ...parameters, Reaction, commandName: Reaction.commandName });
+            } catch (err) {
+                log.err("onReaction", err);
+            }
+        }
+
+        // —————————————————————————————————————————————— //
+        //                  ON ANY EVENT                  //
+        // —————————————————————————————————————————————— //
+        async function onAnyEvent() {
+            const { onAnyEvent } = GoatBot;
+            for (const [key, command] of onAnyEvent) {
+                if (!command || !command.onAnyEvent) continue;
+
+                try {
+                    await command.onAnyEvent({ ...parameters, commandName: key });
+                } catch (err) {
+                    log.err("onAnyEvent", err);
+                }
+            }
+        }
+
+        // —————————————————————————————————————————————— //
+        //                 HANDLER EVENT                  //
+        // —————————————————————————————————————————————— //
+        async function handlerEvent() {
+            const { handlerEvent } = GoatBot;
+            for (const [key, command] of handlerEvent) {
+                if (!command || !command.handlerEvent) continue;
+
+                try {
+                    await command.handlerEvent({ ...parameters, commandName: key });
+                } catch (err) {
+                    log.err("handlerEvent", err);
+                }
+            }
+        }
+
+        // —————————————————————————————————————————————— //
+        //                    ON EVENT                    //
+        // —————————————————————————————————————————————— //
+        async function onEvent() {
+            const { onEvent } = GoatBot;
+            const eventCommand = onEvent.get(event.logMessageType);
+            if (!eventCommand) return;
+
+            const roleConfig = getRoleConfig(utils, eventCommand, isGroup, threadData, eventCommand.config.name);
+            if (roleConfig.onEvent > role) return;
+
+            try {
+                await eventCommand.onEvent({ ...parameters, commandName: eventCommand.config.name });
+            } catch (err) {
+                log.err("onEvent", err);
+            }
+        }
 
         // Execute handlers
         onAnyEvent();
