@@ -19,7 +19,7 @@ module.exports = {
           "  {pn} 5 milf            → 5 milf-themed\n" +
           "  {pn} 10 big_breasts anal → 10 images with both tags\n" +
           "Max images: 15 (Messenger limit)\n" +
-          "Common tags: milf, anal, big_breasts, blowjob, creampie, schoolgirl, yuri, yaoi, tentacles, etc."
+          "Common tags: maid,waifu,marin-kitagawa,mori-calliope,raiden-shogun,oppai,selfies,uniform,kamisato-ayaka,ass,hentai,milf,oral,paizuri,ecchi,ero"
     }
   },
 
