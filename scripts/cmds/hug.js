@@ -6,44 +6,63 @@ module.exports = {
   config: {
     name: "hug",
     aliases: ["us", "抱"],
-    version: "1.1",
-    author: "AceGun (updated)",
+    version: "1.2",
+    author: "AceGun, ChalresMK",
     countDown: 5,
     role: 0,
     shortDescription: "Send a hug",
     longDescription: "Hug someone with a cute image",
     category: "love",
     guide: {
-      en: "{pn} [@tag]"
+      en: "{pn} [@tag] | {pn} [uid] | Reply to a message with {pn}"
     }
   },
 
   onStart: async function ({ api, message, event, args }) {
-    const mentions = Object.keys(event.mentions);
+    let targetId;
+    const senderId = event.senderID;
 
-    if (mentions.length === 0) {
-      return message.reply("Please mention someone to hug! 🫂");
+    // Method 1: Check if replying to a message
+    if (event.messageReply) {
+      targetId = event.messageReply.senderID;
+    }
+    // Method 2: Check for mentions (tags)
+    else if (Object.keys(event.mentions).length > 0) {
+      const mentions = Object.keys(event.mentions);
+      targetId = mentions[0];
+    }
+    // Method 3: Check if a UID is provided as argument
+    else if (args[0]) {
+      // Validate if it's a numeric UID
+      if (/^\d+$/.test(args[0])) {
+        targetId = args[0];
+      } else {
+        return message.reply("Please provide a valid UID, tag someone, or reply to their message! 💕");
+      }
+    }
+    // No valid target found
+    else {
+      return message.reply("Please mention someone, provide their UID, or reply to their message to hug them! 🤗");
     }
 
-    let senderId, targetId;
-
-    if (mentions.length === 1) {
-      senderId = event.senderID;
-      targetId = mentions[0];
-    } else {
-      senderId = mentions[1] || event.senderID;
-      targetId = mentions[0];
+    // Don't allow hugging yourself
+    if (targetId === senderId) {
+      return message.reply("You can't hug yourself silly! Tag someone else 😄");
     }
 
     try {
       const path = await createHugImage(senderId, targetId, api);
       await message.reply({
-        body: "Come here~ 🫂💕",
+        body: "Come here~ 🤗💕",
         attachment: fs.createReadStream(path)
       });
 
       // Clean up
-      setTimeout(() => fs.unlinkSync(path), 5000);
+      setTimeout(() => {
+        if (fs.existsSync(path)) {
+          fs.unlinkSync(path);
+        }
+      }, 5000);
 
     } catch (err) {
       console.error("Hug error:", err);
@@ -76,7 +95,7 @@ async function createHugImage(one, two, api) {
   template.composite(avone.resize(110, 110), 150, 76);
   template.composite(avtwo.resize(100, 100), 245, 305);
 
-  const outputPath = `\( {__dirname}/cache/hug_ \){Date.now()}.png`;
+  const outputPath = `${__dirname}/cache/hug_${Date.now()}.png`;
   await template.writeAsync(outputPath);
 
   return outputPath;
