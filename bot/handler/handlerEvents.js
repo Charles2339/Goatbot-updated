@@ -45,7 +45,7 @@ async function trackCommandSpam(threadID, threadName, globalData, message) {
     if (global.temp.commandSpamTracker[threadID].length >= spamConfig.commandThreshold) {
         const spamBannedThreads = await globalData.get("spamBannedThreads", "data", {});
         const banDuration = spamConfig.banDuration * 60 * 60 * 1000;
-        
+
         spamBannedThreads[threadID] = {
             bannedAt: now,
             expireTime: now + banDuration,
@@ -59,9 +59,9 @@ async function trackCommandSpam(threadID, threadName, globalData, message) {
 
         const hours = spamConfig.banDuration;
         message.reply(`⛔ | This group has been temporarily banned for ${hours} hours due to command spam.\n\nPlease wait or contact an admin to unban.`);
-        
+
         global.utils.log.warn("SPAM_BAN", `Thread ${threadID} (${threadName}) banned for command spam`);
-        
+
         return true;
     }
 
@@ -76,7 +76,7 @@ function getRole(threadData, senderID) {
     if (!senderID)
         return 0;
     const adminBox = threadData ? threadData.adminIDs || [] : [];
-    
+
     if (devUsers.includes(senderID))
         return 4;
     if (premiumUsers.includes(senderID)) {
@@ -300,6 +300,13 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             // —————————————— CHECK USE BOT —————————————— //
             if (!body || !body.startsWith(prefix))
                 return;
+                // —————————— CHECK GLOBAL BAN (SILENT) —————————— //
+                // —————————— CHECK GLOBAL BAN (SILENT) —————————— //
+    const globalBannedList = await globalData.get("bannedUsers", "data", []);
+    if (globalBannedList.includes(senderID)) {
+        // Silently ignore - no message sent
+        return;
+    }
 
             // —————————— CHECK SPAM BANNED THREAD —————————— //
             if (isGroup) {
@@ -368,15 +375,15 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                             `That's just the bot prefix. Try typing ${prefix}help to see available commands.`
                         );
                     }
-                    
+
                     // Command suggestion using Levenshtein distance
                     const allCommands = Array.from(GoatBot.commands.keys());
                     const allAliases = Array.from(GoatBot.aliases.keys());
                     const allCommandNames = [...allCommands, ...allAliases];
-                    
+
                     let bestMatch = null;
                     let bestDistance = Infinity;
-                    
+
                     function levenshtein(a, b) {
                         const matrix = [];
                         for (let i = 0; i <= b.length; i++) {
@@ -400,7 +407,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                         }
                         return matrix[b.length][a.length];
                     }
-                    
+
                     for (const cmd of allCommandNames) {
                         const distance = levenshtein(commandName.toLowerCase(), cmd.toLowerCase());
                         if (distance < bestDistance && distance <= 3) {
@@ -408,12 +415,12 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                             bestMatch = cmd;
                         }
                     }
-                    
+
                     let suggestionMsg = utils.getText({ lang: langCode, head: "handlerEvents" }, "commandNotFound", commandName, prefix);
                     if (bestMatch) {
                         suggestionMsg += `\n\nDid you mean: ${prefix}${bestMatch}?`;
                     }
-                    
+
                     return await message.reply(suggestionMsg);
                 }
                 else
@@ -678,7 +685,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
         }
 
 
-        /* 
+        /*
          +------------------------------------------------+
          |                    ON REPLY                    |
          +------------------------------------------------+
@@ -751,7 +758,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             const { onReaction } = GoatBot;
             const Reaction = onReaction.get(messageID);
             const reaction = event.reaction;
-            
+
             // Developer unsend reaction feature - works for any bot message
             if ((reaction === "😡" || reaction === "😠") && role >= 4) {
                 try {
@@ -764,7 +771,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                     log.err("onReaction", "Failed to unsend message", err);
                 }
             }
-            
+
             if (!Reaction)
                 return;
             Reaction.delete = () => onReaction.delete(messageID);
