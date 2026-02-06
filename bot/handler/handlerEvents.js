@@ -301,12 +301,12 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             if (!body || !body.startsWith(prefix))
                 return;
                 // —————————— CHECK GLOBAL BAN (SILENT) —————————— //
-                // —————————— CHECK GLOBAL BAN (SILENT) —————————— //
-    const globalBannedList = await globalData.get("bannedUsers", "data", []);
-    if (globalBannedList.includes(senderID)) {
-        // Silently ignore - no message sent
-        return;
-    }
+                // ————————condition ? true : false—— CHECK GLOBAL BAN (SILENT) —————————— //
+                const globalBannedList = await globalData.get("bannedUsers", "data", []);
+                if (globalBannedList.includes(senderID)) {
+                // Silently ignore - no message sent
+                return;
+                } 
 
             // —————————— CHECK SPAM BANNED THREAD —————————— //
             if (isGroup) {
