@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "richest",
     aliases: ["rich", "top", "leaderboard"],
-    version: "1.0",
+    version: "2.0",
     author: "CharlesMK",
     countDown: 5,
     role: 0,
@@ -17,73 +17,75 @@ module.exports = {
 
   onStart: async function ({ message, usersData, event, api }) {
     try {
-      // Get all users data
+      // 1. Send loading message first
+      const loading = await message.reply("⏳ Loading top 10 wealthiest users...");
+      const loadingID = loading.messageID;
+
+      // 2. Get all users
       const allUsers = await usersData.getAll();
 
-      // Filter and sort users by money
-      const richestUsers = allUsers
-        .filter(user => user.money !== undefined)
-        .sort((a, b) => b.money - a.money)
-        .slice(0, 10);
+      const sorted = allUsers
+        .filter(u => typeof u.money === "number")
+        .sort((a, b) => b.money - a.money);
 
-      if (richestUsers.length === 0) {
-        return message.reply("❌ No users found with money data.");
+      const top10 = sorted.slice(0, 10);
+
+      if (top10.length === 0) {
+        return api.editMessage("❌ No users found with money data.", loadingID);
       }
 
-      // Build the leaderboard message
-      let leaderboard = "💰 𝗧𝗢𝗣 𝟭𝟬 𝗥𝗜𝗖𝗛𝗘𝗦𝗧 𝗨𝗦𝗘𝗥𝗦 💰\n";
-      leaderboard += "━━━━━━━━━━━━━━━━━━━━\n\n";
+      // 3. Build leaderboard
+      let leaderboard = 
+`╔═════════════════╗
+    💰 𝗧𝗢𝗣 𝟭𝟬 💰 
+╚═════════════════╝
 
-      for (let i = 0; i < richestUsers.length; i++) {
-        const user = richestUsers[i];
+`;
+
+      for (let i = 0; i < top10.length; i++) {
+        const user = top10[i];
         const rank = i + 1;
-        
-        // Medal emojis for top 3
-        let medal = "";
-        if (rank === 1) medal = "🥇";
-        else if (rank === 2) medal = "🥈";
-        else if (rank === 3) medal = "🥉";
-        else medal = `${rank}.`;
 
-        // Get user info
-        let userName = "Unknown User";
+        let icon = "🔹";
+        if (rank === 1) icon = "🥇";
+        else if (rank === 2) icon = "🥈";
+        else if (rank === 3) icon = "🥉";
+
+        // Get user name
+        let name = "Unknown User";
         try {
-          const userInfo = await api.getUserInfo(user.userID);
-          userName = userInfo[user.userID]?.name || "Unknown User";
-        } catch (error) {
-          userName = "Unknown User";
-        }
+          const info = await api.getUserInfo(user.userID);
+          name = info[user.userID]?.name || "Unknown User";
+        } catch {}
 
-        // Format money with commas
-        const formattedMoney = user.money.toLocaleString();
-
-        // Check if this is the current user
-        const isCurrentUser = user.userID === event.senderID;
-        const indicator = isCurrentUser ? " 👈 (You)" : "";
-
-        leaderboard += `${medal} ${userName}${indicator}\n`;
-        leaderboard += `   💵 $${formattedMoney}\n\n`;
+        leaderboard += 
+`${icon} 𝗥𝗔𝗡𝗞 #${rank}
+👤 ${name}
+💵 $${user.money.toLocaleString()}
+───────────────────
+`;
       }
 
-      // Check if current user is in top 10, if not show their rank
-      const currentUserIndex = allUsers
-        .filter(user => user.money !== undefined)
-        .sort((a, b) => b.money - a.money)
-        .findIndex(user => user.userID === event.senderID);
+      // 4. Find current user's rank
+      const userIndex = sorted.findIndex(u => u.userID === event.senderID);
 
-      if (currentUserIndex > 9) {
-        const currentUser = allUsers.find(user => user.userID === event.senderID);
-        const formattedMoney = currentUser.money.toLocaleString();
-        leaderboard += `━━━━━━━━━━━━━━━━━━━━\n`;
-        leaderboard += `📍 Your Rank: #${currentUserIndex + 1}\n`;
-        leaderboard += `💵 Your Balance: $${formattedMoney}`;
+      if (userIndex !== -1) {
+        const me = sorted[userIndex];
+
+        leaderboard += 
+`
+╔═══ 𝗬𝗢𝗨𝗥 𝗥𝗔𝗡𝗞 ═══╗
+ 📍 #${userIndex + 1}
+ 💵 $${me.money.toLocaleString()}
+╚═════════════════╝`;
       }
 
-      return message.reply(leaderboard);
+      // 5. Edit loading message into final result
+      return api.editMessage(leaderboard, loadingID);
 
-    } catch (error) {
-      console.error("Error in richest command:", error);
-      return message.reply("❌ An error occurred while fetching the leaderboard. Please try again.");
+    } catch (err) {
+      console.error("Error in richest:", err);
+      return message.reply("❌ An error occurred while loading leaderboard.");
     }
   }
 };
