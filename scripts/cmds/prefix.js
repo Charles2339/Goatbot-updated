@@ -23,7 +23,7 @@ module.exports = {
       confirmThisThread: "Please react to this message to confirm prefix change for this group",
       successGlobal: "Changed global prefix to: %1",
       successThisThread: "Changed prefix in this group to: %1",
-      myPrefix: "👋 Hey %1!\n\n🌐 Global Prefix: %2\n💬 Chat Prefix: %3\n\n🕒 Time: %4\n📅 Date: %5\n👤 Owner: Charles MK"
+      myPrefix: "👋 Hey %1!\n\n🌐 Global Prefix: %2\n💬 Chat Prefix: %3\n\n🕒 Time: %4\n📅 Date: %5"
     }
   },
 
