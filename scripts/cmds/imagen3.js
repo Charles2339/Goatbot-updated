@@ -10,7 +10,7 @@ module.exports = {
     aliases: ["img3", "generate3"],
     version: "1.1", 
     author: "NeoKEX",
-    countDown: 15,
+    countDown: 60,
     role: 0,
     longDescription: "Generate a new image using the Imagen3 model.",
     category: "ai-image",
