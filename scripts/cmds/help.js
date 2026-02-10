@@ -6,7 +6,7 @@ module.exports = {
                 name: "help",
                 aliases: ["menu", "commands", "cmds"],
                 version: "5.0",
-                author: "CharlesMK",
+                author: "Charles MK",
                 shortDescription: "Show all available commands",
                 longDescription: "Displays a premium-styled categorized list of all bot commands with detailed information.",
                 category: "system",

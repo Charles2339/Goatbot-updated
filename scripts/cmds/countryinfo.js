@@ -5,7 +5,7 @@ module.exports = {
     name:"countryinfo",
     aliases: ["countryinfo"],
     version: "1.0",
-    author: "CharlesMK"
+    author: "Charles MK"
   },
 
   onStart: async function ({ api, event, args }) {
