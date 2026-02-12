@@ -285,7 +285,7 @@ const VEHICLES = {
 
 module.exports = {
   config: {
-    name: "minetravel",
+    name: "travel",
     aliases: ["goto", "mine travel", "move"],
     version: "1.0",
     author: "CharlesMK",
