@@ -189,7 +189,7 @@ const MINING_LOCATIONS = {
 
 module.exports = {
   config: {
-    name: "minelocations",
+    name: "locations",
     aliases: ["mininglocation", "miningmap", "mines", "mineplaces"],
     version: "1.0",
     author: "CharlesMK",
