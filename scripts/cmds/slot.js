@@ -1,4 +1,3 @@
-// Store slot usage data for each user
 const slotUsage = new Map();
 
 module.exports = {
@@ -14,7 +13,7 @@ module.exports = {
     },
     category: "game",
     guide: {
-      en: "{pn} <amount>\nExample: {pn} 50\n\n⏰ Limit: 20 spins per hour"
+      en: "{pn} <amount>\nExample: {pn} 50\n\n⏰ Limit: 10 spins per hour"
     }
   },
 
@@ -24,34 +23,34 @@ module.exports = {
     // Check if user wants to see their remaining spins
     if (args[0] && args[0].toLowerCase() === "status") {
       const usage = slotUsage.get(senderID);
-      
-      if (!usage || usage.spins < 20) {
-        const spinsLeft = usage ? 20 - usage.spins : 20;
+
+      if (!usage || usage.spins < 10) {
+        const spinsLeft = usage ? 10 - usage.spins : 10;
         return message.reply(
           `🎰 𝗦𝗟𝗢𝗧 𝗦𝗧𝗔𝗧𝗨𝗦\n\n` +
-          `🎮 Spins remaining: ${spinsLeft}/20\n` +
+          `🎮 Spins remaining: ${spinsLeft}/10\n` +
           `✅ Ready to play!`
         );
       }
 
       const now = Date.now();
       const timeLeft = usage.resetTime - now;
-      
+
       if (timeLeft <= 0) {
         slotUsage.delete(senderID);
         return message.reply(
           `🎰 𝗦𝗟𝗢𝗧 𝗦𝗧𝗔𝗧𝗨𝗦\n\n` +
-          `🎮 Spins remaining: 20/20\n` +
+          `🎮 Spins remaining 10/10\n` +
           `✅ Your spins have been reset!`
         );
       }
 
       const minutes = Math.floor(timeLeft / 60000);
       const seconds = Math.floor((timeLeft % 60000) / 1000);
-      
+
       return message.reply(
         `🎰 𝗦𝗟𝗢𝗧 𝗦𝗧𝗔𝗧𝗨𝗦\n\n` +
-        `🎮 Spins used: 20/20\n` +
+        `🎮 Spins used: 10/10\n` +
         `⏰ Cooldown: ${minutes}m ${seconds}s\n\n` +
         `Come back later to spin again!`
       );
@@ -82,14 +81,14 @@ module.exports = {
     }
 
     // Check if user has exceeded spin limit
-    if (usage.spins >= 20) {
+    if (usage.spins >= 10) {
       const timeLeft = usage.resetTime - now;
       const minutes = Math.floor(timeLeft / 60000);
       const seconds = Math.floor((timeLeft % 60000) / 1000);
 
       return message.reply(
         `⏰ 𝗦𝗟𝗢𝗧 𝗖𝗢𝗢𝗟𝗗𝗢𝗪𝗡\n\n` +
-        `You've used all 20 spins! 🎰\n\n` +
+        `You've used all 10 spins! 🎰\n\n` +
         `⏳ Time remaining: ${minutes}m ${seconds}s\n\n` +
         `Come back later to play again!\n` +
         `Check status anytime: +slot status`
@@ -107,7 +106,7 @@ module.exports = {
 
     const slots = ["🍒", "🍋", "🍉", "💎", "7️⃣"];
     const spin = () => slots[Math.floor(Math.random() * slots.length)];
-    
+
     const reel1 = spin();
     const reel2 = spin();
     const reel3 = spin();
@@ -138,7 +137,7 @@ module.exports = {
     slotUsage.set(senderID, usage);
 
     // Calculate spins remaining
-    const spinsLeft = 20 - usage.spins;
+    const spinsLeft = 10 - usage.spins;
 
     await usersData.set(senderID, {
       money: newBalance,
@@ -148,7 +147,7 @@ module.exports = {
 
     let spinInfo = "";
     if (spinsLeft > 0) {
-      spinInfo = `\n🎮 Spins left: ${spinsLeft}/20`;
+      spinInfo = `\n🎮 Spins left: ${spinsLeft}/10`;
     } else {
       spinInfo = `\n⏰ No spins left! Cooldown: 1 hour`;
     }

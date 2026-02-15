@@ -165,7 +165,7 @@ const VEHICLES = {
 module.exports = {
   config: {
     name: "buy",
-    aliases: ["purchase", "shop", "store"],
+    aliases: ["transport","purchase", "shop", "store"],
     version: "1.0",
     author: "CharlesMK",
     countDown: 5,
