@@ -7,27 +7,26 @@ module.exports = {
   config: {
     name: "youai",
     aliases: ["you", "youchat", "ai", "gpt", "gemini"],
-    version: "3.1",
+    version: "4.0",
     author: "Nexo & Charles MK",
     countDown: 5,
     role: 0,
-    shortDescription: "Chat with MK AI",
+    shortDescription: "Chat with AI",
     longDescription: "Send a message and get intelligent AI responses with conversation memory. Reply to bot messages to continue chatting.",
     category: "ai",
     guide: {
       en: "{pn} <your message> - Chat with AI\n" +
           "{pn} reset - Clear your conversation history\n" +
-          "Reply to the bot's message to continue the conversation\n" +
-          "Just keep typing to continue the conversation"
+          "Reply to the bot's message to continue the conversation"
     }
   },
 
   langs: {
     en: {
-      noInput: "❌ Please provide a message to chat\n\nUsage: +you <message>",
-      loading: "🧠 Thinking...",
-      error: "❌ Failed to get response from MK AI\nPlease try again later",
-      resetSuccess: "✅ Your conversation history has been cleared!"
+      noInput: "❌ Please provide a message to chat\n\nUsage: +ai <message>",
+      loading: "💭",
+      error: "❌ Failed to get response. Please try again.",
+      resetSuccess: "✅ Conversation history cleared!"
     }
   },
 
@@ -84,17 +83,22 @@ Respond naturally as an AI assistant.
       if (conversation.length > 20)
         userConversations.set(senderID, conversation.slice(-20));
 
-      let responseMsg =
-        `🤖 MK AI RESPONSE\n━━━━━━━━━━━━━━━━━━\n\n` +
-        aiText +
-        `\n\n━━━━━━━━━━━━━━━━━━\n💡 Reply to this message to continue chatting`;
+      // Remove links/URLs from the response to avoid messy formatting
+      let cleanText = aiText.replace(/https?:\/\/[^\s]+/g, '').trim();
+      
+      // Remove any citation markers like [1], [2], etc.
+      cleanText = cleanText.replace(/\[\d+\]/g, '').trim();
+      
+      // Remove multiple consecutive newlines
+      cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
       // Unsend the loading message
       if (processingMsg && processingMsg.messageID) {
         await message.unsend(processingMsg.messageID).catch(() => {});
       }
 
-      const sentMessage = await message.reply(responseMsg);
+      // Send just the clean AI response, no formatting
+      const sentMessage = await message.reply(cleanText);
 
       // Set up onReply handler for continuous conversation
       global.GoatBot.onReply.set(sentMessage.messageID, {
@@ -106,7 +110,7 @@ Respond naturally as an AI assistant.
       return;
 
     } catch (err) {
-      console.error("MK AI Error:", err.message || err);
+      console.error("AI Error:", err.message || err);
       return message.reply(getLang("error"));
     }
   },
@@ -121,7 +125,7 @@ Respond naturally as an AI assistant.
 
       const input = (event.body || "").trim();
 
-      if (!input) return message.reply("❌ Please provide a message to continue the conversation");
+      if (!input) return message.reply("❌ Please provide a message");
 
       // Handle reset command in reply
       if (input.toLowerCase() === "reset") {
@@ -172,17 +176,22 @@ Respond naturally as an AI assistant.
         userConversations.set(senderID, conversation.slice(-20));
       }
 
-      let responseMsg =
-        `🤖 MK AI RESPONSE\n━━━━━━━━━━━━━━━━━━\n\n` +
-        aiText +
-        `\n\n━━━━━━━━━━━━━━━━━━\n💡 Reply to this message to continue chatting`;
+      // Remove links/URLs from the response
+      let cleanText = aiText.replace(/https?:\/\/[^\s]+/g, '').trim();
+      
+      // Remove citation markers
+      cleanText = cleanText.replace(/\[\d+\]/g, '').trim();
+      
+      // Remove multiple consecutive newlines
+      cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
       // Unsend the loading message
       if (processingMsg && processingMsg.messageID) {
         await message.unsend(processingMsg.messageID).catch(() => {});
       }
 
-      const sentMessage = await message.reply(responseMsg);
+      // Send just the clean response
+      const sentMessage = await message.reply(cleanText);
 
       // Set up onReply handler for the new message
       global.GoatBot.onReply.set(sentMessage.messageID, {
@@ -192,7 +201,7 @@ Respond naturally as an AI assistant.
       });
 
     } catch (err) {
-      console.error("MK AI Reply Error:", err.message || err);
+      console.error("AI Reply Error:", err.message || err);
       return message.reply(getLang("error"));
     }
   }
