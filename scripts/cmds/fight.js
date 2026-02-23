@@ -1,443 +1,563 @@
 const TIMEOUT_SECONDS = 120;
-const ongoingFights = new Map();
-const gameInstances = new Map();
+const ongoingFights   = new Map();
+const gameInstances   = new Map();
 const pendingChallenges = new Map();
 
+// ═══════════════════════════════════════════════════════════════
+//   MOVES DATABASE
+// ═══════════════════════════════════════════════════════════════
+const MOVES = {
+  // ─── Basic Attacks ─────────────────────────────────────────
+  punch:     { min: 5,  max: 15,  emoji: "👊", type: "basic",   label: "𝘱𝘶𝘯𝘤𝘩"      },
+  kick:      { min: 10, max: 20,  emoji: "🦵", type: "basic",   label: "𝘬𝘪𝘤𝘬"       },
+  slap:      { min: 1,  max: 5,   emoji: "✋", type: "basic",   label: "𝘴𝘭𝘢𝘱"       },
+  headbutt:  { min: 15, max: 25,  emoji: "🗿", type: "basic",   label: "𝘩𝘦𝘢𝘥𝘣𝘶𝘵𝘵"   },
+  elbow:     { min: 8,  max: 18,  emoji: "💪", type: "basic",   label: "𝘦𝘭𝘣𝘰𝘸"      },
+  uppercut:  { min: 12, max: 22,  emoji: "🥊", type: "basic",   label: "𝘶𝘱𝘱𝘦𝘳𝘤𝘶𝘵"   },
+  // ─── Power Attacks ─────────────────────────────────────────
+  backslash: { min: 20, max: 35,  emoji: "⚡", type: "power",   label: "𝘣𝘢𝘤𝘬𝘴𝘭𝘢𝘴𝘩"  },
+  dropkick:  { min: 18, max: 30,  emoji: "🌀", type: "power",   label: "𝘥𝘳𝘰𝘱𝘬𝘪𝘤𝘬"   },
+  suplex:    { min: 22, max: 38,  emoji: "🤼", type: "power",   label: "𝘴𝘶𝘱𝘭𝘦𝘹"     },
+  haymaker:  { min: 25, max: 40,  emoji: "💢", type: "power",   label: "𝘩𝘢𝘺𝘮𝘢𝘬𝘦𝘳"   },
+  stomp:     { min: 14, max: 28,  emoji: "👟", type: "power",   label: "𝘴𝘵𝘰𝘮𝘱"      },
+  // ─── Special Attacks (require unlocks via +fight upgrade) ──
+  deathblow: { min: 35, max: 55,  emoji: "💀", type: "special", label: "𝘥𝘦𝘢𝘵𝘩𝘣𝘭𝘰𝘸", requires: "deathblow" },
+  sonicfist: { min: 30, max: 50,  emoji: "🌪️", type: "special", label: "𝘴𝘰𝘯𝘪𝘤𝘧𝘪𝘴𝘵", requires: "sonicfist" },
+  shockwave: { min: 28, max: 45,  emoji: "⚡", type: "special", label: "𝘴𝘩𝘰𝘤𝘬𝘸𝘢𝘷𝘦",  requires: "shockwave" },
+  blazekick: { min: 32, max: 52,  emoji: "🔥", type: "special", label: "𝘣𝘭𝘢𝘻𝘦𝘬𝘪𝘤𝘬", requires: "blazekick" },
+  // ─── Defense Actions ───────────────────────────────────────
+  block:     { type: "defense", emoji: "🛡️", label: "𝘣𝘭𝘰𝘤𝘬"   },
+  parry:     { type: "defense", emoji: "⚔️",  label: "𝘱𝘢𝘳𝘳𝘺"   },
+  counter:   { type: "defense", emoji: "🔄",  label: "𝘤𝘰𝘶𝘯𝘵𝘦𝘳" },
+  evade:     { type: "defense", emoji: "💨",  label: "𝘦𝘷𝘢𝘥𝘦"   },
+};
+
+// ═══════════════════════════════════════════════════════════════
+//   STATS HELPERS
+// ═══════════════════════════════════════════════════════════════
+function getStats(userData) {
+  const d = userData.data || {};
+  return {
+    level:        d.fightLevel        || 1,
+    wins:         d.fightWins         || 0,
+    losses:       d.fightLosses       || 0,
+    atkBonus:     d.fightAtkBonus     || 0,   // flat damage bonus
+    defBonus:     d.fightDefBonus     || 0,   // % damage reduction (0–80)
+    agilityBonus: d.fightAgilityBonus || 0,   // extra % dodge chance (0–50)
+    trait:        d.fightTrait        || null,
+    skills:       d.fightSkills       || {},  // { skillId: level }
+    trainedAt:    d.fightTrainedAt    || 0,
+    xp:           d.fightXP          || 0,
+  };
+}
+
+function xpForLevel(lvl) { return lvl * 100; }
+
+function calcLevel(stats) {
+  let lvl = 1, xp = stats.xp;
+  while (xp >= xpForLevel(lvl)) { xp -= xpForLevel(lvl); lvl++; if (lvl >= 100) break; }
+  return lvl;
+}
+
+const TRAITS = {
+  ironhide:   { label: "𝗜𝗿𝗼𝗻 𝗛𝗶𝗱𝗲",     desc: "Born with skin like steel — reduces all incoming damage by 18%.", defBonus: 18 },
+  shadowstep: { label: "𝗦𝗵𝗮𝗱𝗼𝘄 𝗦𝘁𝗲𝗽",   desc: "Phantom-like reflexes — +20% base dodge chance.",                agilityBonus: 20 },
+  berserker:  { label: "𝗕𝗲𝗿𝘀𝗲𝗿𝗸𝗲𝗿",     desc: "Rage fuels power — +12 flat bonus to every attack.",            atkBonus: 12 },
+  cursed:     { label: "𝗖𝘂𝗿𝘀𝗲𝗱 𝗙𝗶𝘀𝘁",   desc: "Attacks apply a curse, reducing opponent defense by 10%.",      debuff: 10 },
+  phoenix:    { label: "𝗣𝗵𝗼𝗲𝗻𝗶𝘅 𝗕𝗹𝗼𝗼𝗱", desc: "Once per fight, survive a lethal blow with 1 HP.",              revive: true },
+};
+
+// ═══════════════════════════════════════════════════════════════
 module.exports = {
   config: {
     name: "fight",
-    version: "2.0",
-    author: "Shikai | Redwan | Charles",
+    aliases: ["battle", "duel"],
+    version: "3.0",
+    author: "Charles MK",
     countDown: 10,
     role: 0,
-    shortDescription: { en: "Fight with your friends!" },
+    shortDescription: { en: "⚔️ Fight, bet & rise through the ranks!" },
     category: "fun",
-    guide: { en: "{pn} @mention | Reply to message | {pn} [UID] | Use 'topfighter' for leaderboard" },
+    guide: {
+      en:
+        "{pn} @mention | reply | {pn} [UID]\n" +
+        "{pn} topfighter — 🏆 Leaderboard\n" +
+        "Attacks: punch, kick, slap, headbutt, elbow, uppercut,\n" +
+        "         backslash, dropkick, suplex, haymaker, stomp (power)\n" +
+        "Special: deathblow, sonicfist, shockwave, blazekick (unlock via +fight upgrade)\n" +
+        "Defense: block, parry, counter, evade\n" +
+        "Type 'forfeit' to surrender.",
+    },
   },
 
+  // ───────────────────────────────────────────────────────────
   onStart: async function ({ event, message, usersData, args }) {
     const threadID = event.threadID;
 
-    // 🏆 Leaderboard
+    // ── Leaderboard ────────────────────────────────────────
     if (args[0] === "topfighter" || args[0] === "topfight") {
       const allUsers = await usersData.getAll();
       const fighters = allUsers
         .filter(u => u.data && u.data.fightWins > 0)
         .sort((a, b) => {
-          const winsA = a.data.fightWins || 0;
-          const winsB = b.data.fightWins || 0;
-          if (winsB !== winsA) return winsB - winsA;
-          const lossesA = a.data.fightLosses || 0;
-          const lossesB = b.data.fightLosses || 0;
-          return lossesA - lossesB;
+          if ((b.data.fightWins || 0) !== (a.data.fightWins || 0))
+            return (b.data.fightWins || 0) - (a.data.fightWins || 0);
+          return (a.data.fightLosses || 0) - (b.data.fightLosses || 0);
         });
 
-      if (fighters.length === 0) {
-        return message.reply("🥊 𝗧𝗢𝗣 𝗙𝗜𝗚𝗛𝗧𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\nNo fighters yet!");
-      }
+      if (!fighters.length)
+        return message.reply("🥊 𝗧𝗢𝗣 𝗙𝗜𝗚𝗛𝗧𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n𝘕𝘰 𝘧𝘪𝘨𝘩𝘵𝘦𝘳𝘴 𝘺𝘦𝘵!");
 
+      const medals = ["🥇", "🥈", "🥉"];
       let msg = "🥊 𝗧𝗢𝗣 𝗙𝗜𝗚𝗛𝗧𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n";
-      fighters.slice(0, 10).forEach((user, index) => {
-        const wins = user.data.fightWins || 0;
-        const losses = user.data.fightLosses || 0;
-        const total = wins + losses;
-        const winRate = total > 0 ? ((wins / total) * 100).toFixed(1) : 0;
-
-        msg += `${index + 1}. ${user.name}\n`;
-        msg += `   🏆 ${wins}W - ${losses}L | 📊 ${winRate}%\n\n`;
+      fighters.slice(0, 10).forEach((u, i) => {
+        const wins   = u.data.fightWins   || 0;
+        const losses = u.data.fightLosses || 0;
+        const wr     = (wins + losses) ? ((wins / (wins + losses)) * 100).toFixed(1) : "0.0";
+        const lvl    = u.data.fightLevel  || 1;
+        msg += `${medals[i] || `${i + 1}.`} 𝗟𝘃.${lvl} ${u.name}\n`;
+        msg += `   🏆 ${wins}𝗪  💀 ${losses}𝗟  📊 ${wr}%\n\n`;
       });
       return message.reply(msg);
     }
 
-    if (ongoingFights.has(threadID)) {
-      return message.send("⚔️ 𝗔 𝗳𝗶𝗴𝗵𝘁 𝗶𝘀 𝗮𝗹𝗿𝗲𝗮𝗱𝘆 𝗶𝗻 𝗽𝗿𝗼𝗴𝗿𝗲𝘀𝘀.");
-    }
+    if (ongoingFights.has(threadID))
+      return message.send("⚔️ 𝗔 𝗳𝗶𝗴𝗵𝘁 𝗶𝘀 𝗮𝗹𝗿𝗲𝗮𝗱𝘆 𝗶𝗻 𝗽𝗿𝗼𝗴𝗿𝗲𝘀𝘀 𝗵𝗲𝗿𝗲.");
 
+    // ── Resolve opponent ───────────────────────────────────
     let opponentID;
+    if (event.type === "message_reply")          opponentID = event.messageReply.senderID;
+    else if (Object.keys(event.mentions).length) opponentID = Object.keys(event.mentions)[0];
+    else if (args[0] && /^\d+$/.test(args[0]))   opponentID = args[0];
 
-    // Check for opponent
-    if (event.type === "message_reply") {
-      opponentID = event.messageReply.senderID;
-    } else if (Object.keys(event.mentions).length > 0) {
-      opponentID = Object.keys(event.mentions)[0];
-    } else if (args[0] && /^\d+$/.test(args[0])) {
-      opponentID = args[0];
-    }
-
-    if (!opponentID) {
-      return message.send("🤔 𝗣𝗹𝗲𝗮𝘀𝗲 𝗺𝗲𝗻𝘁𝗶𝗼𝗻, 𝗿𝗲𝗽𝗹𝘆 𝘁𝗼, 𝗼𝗿 𝗽𝗿𝗼𝘃𝗶𝗱𝗲 𝗮 𝗨𝗜𝗗 𝘁𝗼 𝗳𝗶𝗴𝗵𝘁.");
-    }
-
-    if (opponentID === event.senderID) {
+    if (!opponentID)
+      return message.send("🤔 𝗠𝗲𝗻𝘁𝗶𝗼𝗻, 𝗿𝗲𝗽𝗹𝘆 𝘁𝗼, 𝗼𝗿 𝗽𝗿𝗼𝘃𝗶𝗱𝗲 𝗮 𝗨𝗜𝗗 𝘁𝗼 𝗰𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲.");
+    if (opponentID === event.senderID)
       return message.send("🤡 𝗬𝗼𝘂 𝗰𝗮𝗻𝗻𝗼𝘁 𝗳𝗶𝗴𝗵𝘁 𝘆𝗼𝘂𝗿𝘀𝗲𝗹𝗳.");
-    }
 
     try {
-      const challengerID = event.senderID;
+      const challengerID   = event.senderID;
       const challengerName = await usersData.getName(challengerID);
-      const opponentName = await usersData.getName(opponentID);
+      const opponentName   = await usersData.getName(opponentID);
 
-      // Create pending challenge
-      const challengeKey = `${threadID}_${challengerID}`;
-      pendingChallenges.set(challengeKey, {
-        challengerID,
-        challengerName,
-        opponentID,
-        opponentName,
-        threadID,
-        step: 'mode_selection'
+      const key = `${threadID}_${challengerID}`;
+      pendingChallenges.set(key, {
+        challengerID, challengerName, opponentID, opponentName,
+        threadID, step: "mode_selection",
       });
 
-      const sent = await message.send(
-        `🤺 𝗙𝗜𝗚𝗛𝗧 𝗖𝗛𝗔𝗟𝗟𝗘𝗡𝗚𝗘\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `👤 ${challengerName} 𝘸𝘢𝘯𝘵𝘴 𝘵𝘰 𝘧𝘪𝘨𝘩𝘵 ${opponentName}!\n\n` +
-        `𝗖𝗵𝗼𝗼𝘀𝗲 𝗳𝗶𝗴𝗵𝘁 𝗺𝗼𝗱𝗲:\n` +
-        `💰 Type "bet" - 𝘍𝘪𝘨𝘩𝘵 𝘸𝘪𝘵𝘩 𝘮𝘰𝘯𝘦𝘺 𝘰𝘯 𝘵𝘩𝘦 𝘭𝘪𝘯𝘦\n` +
-        `🤝 Type "friendly" - 𝘍𝘳𝘪𝘦𝘯𝘥𝘭𝘺 𝘮𝘢𝘵𝘤𝘩 ($50M prize)\n\n` +
+      await message.send(
+        `🤺 𝗙𝗜𝗚𝗛𝗧 𝗖𝗛𝗔𝗟𝗟𝗘𝗡𝗚𝗘!\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `⏱️ 𝘙𝘦𝘱𝘭𝘺 𝘸𝘪𝘵𝘩𝘪𝘯 60𝘴 𝘰𝘳 𝘵𝘺𝘱𝘦 "cancel"`
+        `👤 ${challengerName} 𝗰𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲𝘀 ${opponentName}!\n\n` +
+        `𝗖𝗵𝗼𝗼𝘀𝗲 𝗺𝗼𝗱𝗲:\n` +
+        `  💰 Type "𝗯𝗲𝘁"      — Fight with money on the line\n` +
+        `  🤝 Type "𝗳𝗿𝗶𝗲𝗻𝗱𝗹𝘆" — Friendly match ($50M prize)\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `⏱️ 𝘙𝘦𝘱𝘭𝘺 𝘸𝘪𝘵𝘩𝘪𝘯 60𝘴 𝘰𝘳 𝘵𝘺𝘱𝘦 "𝘤𝘢𝘯𝘤𝘦𝘭"`
       );
 
-      // Set timeout for mode selection
       setTimeout(() => {
-        if (pendingChallenges.has(challengeKey)) {
-          pendingChallenges.delete(challengeKey);
-          message.send("⏰ 𝗖𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲 𝗲𝘅𝗽𝗶𝗿𝗲𝗱 𝗱𝘂𝗲 𝘁𝗼 𝗶𝗻𝗮𝗰𝘁𝗶𝘃𝗶𝘁𝘆.");
+        if (pendingChallenges.has(key)) {
+          pendingChallenges.delete(key);
+          message.send("⏰ 𝗖𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲 𝗲𝘅𝗽𝗶𝗿𝗲𝗱 — 𝗻𝗼 𝗿𝗲𝘀𝗽𝗼𝗻𝘀𝗲.");
         }
-      }, 60000);
-
-    } catch (e) {
-      return message.send("❌ 𝗖𝗼𝘂𝗹𝗱 𝗻𝗼𝘁 𝗳𝗶𝗻𝗱 𝘁𝗵𝗮𝘁 𝘂𝘀𝗲𝗿 𝗶𝗻 𝘁𝗵𝗲 𝗱𝗮𝘁𝗮𝗯𝗮𝘀𝗲.");
+      }, 60_000);
+    } catch {
+      return message.send("❌ 𝗖𝗼𝘂𝗹𝗱 𝗻𝗼𝘁 𝗳𝗶𝗻𝗱 𝘁𝗵𝗮𝘁 𝘂𝘀𝗲𝗿.");
     }
   },
 
+  // ───────────────────────────────────────────────────────────
   onChat: async function ({ event, message, usersData }) {
-    const threadID = event.threadID;
-    const senderID = event.senderID;
-    const userInput = event.body.trim().toLowerCase();
+    const threadID  = event.threadID;
+    const senderID  = event.senderID;
+    const input     = event.body.trim().toLowerCase();
 
-    // Handle pending challenges
-    const challengeKey = `${threadID}_${senderID}`;
-    const pendingChallenge = pendingChallenges.get(challengeKey);
+    // ── Pending challenge flow ─────────────────────────────
+    const cKey      = `${threadID}_${senderID}`;
+    const pending   = pendingChallenges.get(cKey);
 
-    if (pendingChallenge) {
-      const { challengerID, challengerName, opponentID, opponentName, step } = pendingChallenge;
+    if (pending) {
+      const { challengerID, challengerName, opponentID, opponentName, step } = pending;
 
-      if (userInput === "cancel") {
-        pendingChallenges.delete(challengeKey);
+      if (input === "cancel") {
+        pendingChallenges.delete(cKey);
         return message.send("❌ 𝗖𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲 𝗰𝗮𝗻𝗰𝗲𝗹𝗹𝗲𝗱.");
       }
 
-      // Mode selection
-      if (step === 'mode_selection') {
-        if (userInput === "bet") {
-          pendingChallenge.mode = 'bet';
-          pendingChallenge.step = 'bet_amount';
+      if (step === "mode_selection") {
+        if (input === "bet") {
+          pending.mode = "bet";
+          pending.step = "bet_amount";
           return message.send(
-            `💰 𝗕𝗘𝗧 𝗠𝗢𝗗𝗘 𝗦𝗘𝗟𝗘𝗖𝗧𝗘𝗗\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `${challengerName}, 𝘩𝘰𝘸 𝘮𝘶𝘤𝘩 𝘥𝘰 𝘺𝘰𝘶 𝘸𝘢𝘯𝘵 𝘵𝘰 𝘣𝘦𝘵?\n` +
-            `Type an amount (minimum $1,000)`
+            `💰 𝗕𝗘𝗧 𝗠𝗢𝗗𝗘\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `${challengerName}, 𝗵𝗼𝘄 𝗺𝘂𝗰𝗵 𝘄𝗶𝗹𝗹 𝘆𝗼𝘂 𝘄𝗮𝗴𝗲𝗿?\n(𝘔𝘪𝘯 $1,000)`
           );
-        } else if (userInput === "friendly") {
+        }
+        if (input === "friendly") {
+          pendingChallenges.delete(cKey);
           return this.startFight(message, usersData, {
-            challengerID, challengerName, opponentID, opponentName, threadID,
-            mode: 'friendly', challengerBet: 0, opponentBet: 0
+            challengerID, challengerName, opponentID, opponentName,
+            threadID, mode: "friendly", challengerBet: 0, opponentBet: 0,
           });
         }
         return;
       }
 
-      // Bet amount for challenger
-      if (step === 'bet_amount') {
-        const betAmount = parseInt(userInput.replace(/[,$]/g, ''));
-        if (isNaN(betAmount) || betAmount < 1000) {
-          return message.send("❌ 𝗣𝗹𝗲𝗮𝘀𝗲 𝗲𝗻𝘁𝗲𝗿 𝗮 𝘃𝗮𝗹𝗶𝗱 𝗮𝗺𝗼𝘂𝗻𝘁 (min $1,000)");
-        }
+      if (step === "bet_amount") {
+        const bet = parseInt(input.replace(/[,$\s]/g, ""));
+        if (isNaN(bet) || bet < 1000)
+          return message.send("❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗮𝗺𝗼𝘂𝗻𝘁 (𝗺𝗶𝗻 $1,000).");
+        const cData = await usersData.get(challengerID);
+        if (cData.money < bet)
+          return message.send(`❌ 𝗜𝗻𝘀𝘂𝗳𝗳𝗶𝗰𝗶𝗲𝗻𝘁 𝗳𝘂𝗻𝗱𝘀!\n💵 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: $${cData.money.toLocaleString()}`);
+        pending.challengerBet = bet;
+        pending.step = "waiting_opponent_bet";
 
-        const challengerData = await usersData.get(challengerID);
-        if (challengerData.money < betAmount) {
-          return message.send(`❌ 𝗬𝗼𝘂 𝗱𝗼𝗻'𝘁 𝗵𝗮𝘃𝗲 𝗲𝗻𝗼𝘂𝗴𝗵 𝗺𝗼𝗻𝗲𝘆!\n𝘉𝘢𝘭𝘢𝘯𝘤𝘦: $${challengerData.money.toLocaleString()}`);
-        }
-
-        pendingChallenge.challengerBet = betAmount;
-        pendingChallenge.step = 'waiting_opponent_bet';
-        
-        // Transfer to opponent for response
-        const opponentKey = `${threadID}_${opponentID}`;
-        pendingChallenges.set(opponentKey, {
-          ...pendingChallenge,
-          step: 'opponent_bet'
-        });
-        pendingChallenges.delete(challengeKey);
-
+        const oKey = `${threadID}_${opponentID}`;
+        pendingChallenges.set(oKey, { ...pending, step: "opponent_bet" });
+        pendingChallenges.delete(cKey);
         return message.send(
-          `💰 ${challengerName} 𝗯𝗲𝘁 $${betAmount.toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `${opponentName}, 𝘩𝘰𝘸 𝘮𝘶𝘤𝘩 𝘥𝘰 𝘺𝘰𝘶 𝘸𝘢𝘯𝘵 𝘵𝘰 𝘣𝘦𝘵?\n` +
-          `Type an amount or "decline" to refuse`
+          `💰 ${challengerName} 𝗯𝗲𝘁𝘀 $${bet.toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `${opponentName}, 𝗵𝗼𝘄 𝗺𝘂𝗰𝗵 𝘄𝗶𝗹𝗹 𝘆𝗼𝘂 𝘄𝗮𝗴𝗲𝗿?\n(𝘛𝘺𝘱𝘦 𝘢𝘮𝘰𝘶𝘯𝘵 𝘰𝘳 "𝘥𝘦𝘤𝘭𝘪𝘯𝘦")`
         );
       }
     }
 
-    // Handle opponent bet
-    const opponentKey = `${threadID}_${senderID}`;
-    const opponentChallenge = pendingChallenges.get(opponentKey);
+    // ── Opponent bet response ──────────────────────────────
+    const oKey    = `${threadID}_${senderID}`;
+    const oppChal = pendingChallenges.get(oKey);
 
-    if (opponentChallenge && opponentChallenge.step === 'opponent_bet') {
-      if (userInput === "decline") {
-        pendingChallenges.delete(opponentKey);
-        return message.send(`❌ ${opponentChallenge.opponentName} 𝗱𝗲𝗰𝗹𝗶𝗻𝗲𝗱 𝘁𝗵𝗲 𝗳𝗶𝗴𝗵𝘁.`);
+    if (oppChal?.step === "opponent_bet") {
+      if (input === "decline") {
+        pendingChallenges.delete(oKey);
+        return message.send(`❌ ${oppChal.opponentName} 𝗱𝗲𝗰𝗹𝗶𝗻𝗲𝗱 𝘁𝗵𝗲 𝗳𝗶𝗴𝗵𝘁.`);
       }
-
-      const betAmount = parseInt(userInput.replace(/[,$]/g, ''));
-      if (isNaN(betAmount) || betAmount < 1000) {
-        return message.send("❌ 𝗣𝗹𝗲𝗮𝘀𝗲 𝗲𝗻𝘁𝗲𝗿 𝗮 𝘃𝗮𝗹𝗶𝗱 𝗮𝗺𝗼𝘂𝗻𝘁 (min $1,000)");
-      }
-
-      const opponentData = await usersData.get(senderID);
-      if (opponentData.money < betAmount) {
-        return message.send(`❌ 𝗬𝗼𝘂 𝗱𝗼𝗻'𝘁 𝗵𝗮𝘃𝗲 𝗲𝗻𝗼𝘂𝗴𝗵 𝗺𝗼𝗻𝗲𝘆!\n𝘉𝘢𝘭𝘢𝘯𝘤𝘦: $${opponentData.money.toLocaleString()}`);
-      }
-
-      opponentChallenge.opponentBet = betAmount;
-      pendingChallenges.delete(opponentKey);
-
-      return this.startFight(message, usersData, opponentChallenge);
+      const bet = parseInt(input.replace(/[,$\s]/g, ""));
+      if (isNaN(bet) || bet < 1000)
+        return message.send("❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗮𝗺𝗼𝘂𝗻𝘁 (𝗺𝗶𝗻 $1,000).");
+      const oData = await usersData.get(senderID);
+      if (oData.money < bet)
+        return message.send(`❌ 𝗜𝗻𝘀𝘂𝗳𝗳𝗶𝗰𝗶𝗲𝗻𝘁 𝗳𝘂𝗻𝗱𝘀!\n💵 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: $${oData.money.toLocaleString()}`);
+      oppChal.opponentBet = bet;
+      pendingChallenges.delete(oKey);
+      return this.startFight(message, usersData, oppChal);
     }
 
-    // Handle ongoing fight
-    const gameInstance = gameInstances.get(threadID);
-    if (!gameInstance) return;
+    // ── Active fight ───────────────────────────────────────
+    const inst = gameInstances.get(threadID);
+    if (!inst) return;
+    const { fight } = inst;
 
-    const { fight } = gameInstance;
-    const attack = userInput;
-
-    const isChallenger = senderID === fight.participants[0].id;
-    const isOpponent = senderID === fight.participants[1].id;
-    if (!isChallenger && !isOpponent) return;
+    const isP1 = senderID === fight.participants[0].id;
+    const isP2 = senderID === fight.participants[1].id;
+    if (!isP1 && !isP2) return;
 
     if (senderID !== fight.currentPlayer) {
-      if (!gameInstance.turnMessageSent) {
-        const currentPlayerName = fight.participants.find(p => p.id === fight.currentPlayer).name;
-        message.send(`⏳ 𝗣𝗹𝗲𝗮𝘀𝗲 𝘄𝗮𝗶𝘁! It's ${currentPlayerName}'s turn.`);
-        gameInstance.turnMessageSent = true;
+      if (!inst.turnMessageSent) {
+        const curName = fight.participants.find(p => p.id === fight.currentPlayer).name;
+        await message.send(`⏳ 𝗪𝗮𝗶𝘁! 𝗜𝘁'𝘀 ${curName}'𝘀 𝘁𝘂𝗿𝗻.`);
+        inst.turnMessageSent = true;
       }
       return;
     }
 
-    if (attack === "forfeit") {
-      const loser = fight.participants.find(p => p.id === senderID);
+    if (input === "forfeit") {
+      const loser  = fight.participants.find(p => p.id === senderID);
       const winner = fight.participants.find(p => p.id !== senderID);
-      
       await this.handleFightEnd(message, usersData, fight, winner, loser, true);
       return endFight(threadID);
     }
 
-    const moves = {
-      kick: { min: 10, max: 20, emoji: "🦵" },
-      punch: { min: 5, max: 15, emoji: "👊" },
-      slap: { min: 1, max: 5, emoji: "✋" },
-      headbutt: { min: 15, max: 25, emoji: "🗿" },
-      elbow: { min: 8, max: 18, emoji: "💪" },
-      uppercut: { min: 12, max: 22, emoji: "🥊" },
-      backslash: { min: 20, max: 35, emoji: "⚡" }
-    };
+    const attacker = fight.participants.find(p => p.id === senderID);
+    const defender = fight.participants.find(p => p.id !== senderID);
+    const atkData  = await usersData.get(attacker.id);
+    const defData  = await usersData.get(defender.id);
+    const atkStats = getStats(atkData);
+    const defStats = getStats(defData);
+    const move     = MOVES[input];
 
-    if (moves[attack]) {
-      let damage = Math.floor(Math.random() * (moves[attack].max - moves[attack].min + 1)) + moves[attack].min;
-      const isCritical = Math.random() < 0.15;
-      const isDodge = Math.random() < 0.10;
-
-      const attacker = fight.participants.find(p => p.id === senderID);
-      const defender = fight.participants.find(p => p.id !== senderID);
-
-      if (isDodge) {
-        message.send(
-          `💨 𝗗𝗢𝗗𝗚𝗘𝗗!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `${moves[attack].emoji} ${attacker.name} 𝘶𝘴𝘦𝘥 ${attack}\n` +
-          `🌪️ ${defender.name} 𝘦𝘷𝘢𝘥𝘦𝘥 𝘵𝘩𝘦 𝘢𝘵𝘵𝘢𝘤𝘬!\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `💚 ${attacker.name}: ${attacker.hp} HP\n` +
-          `💚 ${defender.name}: ${defender.hp} HP`
-        );
-      } else {
-        if (isCritical) damage = Math.floor(damage * 1.5);
-        defender.hp -= damage;
-
-        let msg = isCritical
-          ? `💥 𝗖𝗥𝗜𝗧𝗜𝗖𝗔𝗟 𝗛𝗜𝗧!\n━━━━━━━━━━━━━━━━━━━━━━\n`
-          : `⚔️ 𝗔𝗧𝗧𝗔𝗖𝗞!\n━━━━━━━━━━━━━━━━━━━━━━\n`;
-
-        msg += `${moves[attack].emoji} ${attacker.name} 𝘶𝘴𝘦𝘥 ${attack}\n`;
-        msg += `🩸 ${defender.name} 𝘵𝘰𝘰𝘬 ${damage} 𝘥𝘢𝘮𝘢𝘨𝘦\n`;
-        msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `💚 ${attacker.name}: ${attacker.hp} HP\n`;
-        msg += defender.hp > 0
-          ? `💛 ${defender.name}: ${Math.max(0, defender.hp)} HP`
-          : `💀 ${defender.name}: 𝘒.𝘖.`;
-
-        message.send(msg);
-
-        if (defender.hp <= 0) {
-          setTimeout(async () => {
-            await this.handleFightEnd(message, usersData, fight, attacker, defender, false);
-            endFight(threadID);
-          }, 1000);
-          return;
-        }
+    // ── Defense ───────────────────────────────────────────
+    if (move?.type === "defense") {
+      let defMsg = "";
+      if (input === "block") {
+        fight.blockActive = { id: attacker.id, reduction: 0.45 + (defStats.defBonus / 200) };
+        defMsg = `🛡️ 𝗕𝗟𝗢𝗖𝗞!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗿𝗮𝗶𝘀𝗲𝘀 𝘁𝗵𝗲𝗶𝗿 𝗴𝘂𝗮𝗿𝗱!\n🛡️ 𝘕𝘦𝘹𝘵 𝘩𝘪𝘵 𝘳𝘦𝘥𝘶𝘤𝘦𝘥 ~45%`;
+      } else if (input === "parry") {
+        fight.parryActive = { id: attacker.id };
+        defMsg = `⚔️ 𝗣𝗔𝗥𝗥𝗬!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗿𝗲𝗮𝗱𝘆 𝘁𝗼 𝗿𝗲𝗳𝗹𝗲𝗰𝘁!\n⚔️ 𝘐𝘧 𝘢𝘵𝘵𝘢𝘤𝘬𝘦𝘥, 𝘳𝘦𝘧𝘭𝘦𝘤𝘵𝘴 30% 𝘥𝘮𝘨 𝘣𝘢𝘤𝘬`;
+      } else if (input === "counter") {
+        fight.counterActive = { id: attacker.id };
+        defMsg = `🔄 𝗖𝗢𝗨𝗡𝗧𝗘𝗥!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗲𝗻𝘁𝗲𝗿𝘀 𝗰𝗼𝘂𝗻𝘁𝗲𝗿 𝘀𝘁𝗮𝗻𝗰𝗲!\n🔄 𝘕𝘦𝘹𝘵 𝘢𝘵𝘵𝘢𝘤𝘬 𝘣𝘰𝘶𝘯𝘤𝘦𝘴 𝘣𝘢𝘤𝘬`;
+      } else if (input === "evade") {
+        const ch = Math.min(0.85, 0.55 + (atkStats.agilityBonus / 200));
+        fight.evadeActive = { id: attacker.id, chance: ch };
+        defMsg = `💨 𝗘𝗩𝗔𝗗𝗘!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗽𝗿𝗲𝗽𝗮𝗿𝗲𝘀 𝘁𝗼 𝗱𝗼𝗱𝗴𝗲!\n💨 ${Math.round(ch * 100)}% 𝘥𝘰𝘥𝘨𝘦 𝘤𝘩𝘢𝘯𝘤𝘦 𝘯𝘦𝘹𝘵 𝘩𝘪𝘵`;
       }
-
+      defMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n💚 ${attacker.name}: ${attacker.hp} HP\n💚 ${defender.name}: ${defender.hp} HP`;
+      await message.send(defMsg);
       fight.currentPlayer = defender.id;
-      gameInstance.turnMessageSent = false;
+      inst.turnMessageSent = false;
       resetTimeout(threadID, message);
+      return;
     }
+
+    if (!move || !["basic","power","special"].includes(move.type)) return;
+
+    // Special move lock check
+    if (move.requires && !(atkStats.skills[move.requires] >= 1))
+      return message.send(`🔒 "${input}" 𝗿𝗲𝗾𝘂𝗶𝗿𝗲𝘀 𝘁𝗵𝗲 "${move.requires}" 𝘂𝗽𝗴𝗿𝗮𝗱𝗲.\nUse +fight upgrade to unlock.`);
+
+    // Counter stance triggers
+    if (fight.counterActive?.id === defender.id) {
+      delete fight.counterActive;
+      attacker.hp -= 10;
+      await message.send(
+        `🔄 𝗖𝗢𝗨𝗡𝗧𝗘𝗥𝗘𝗗!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `${attacker.name} 𝗮𝘁𝘁𝗮𝗰𝗸𝗲𝗱 — ${defender.name} 𝗰𝗼𝘂𝗻𝘁𝗲𝗿𝗲𝗱!\n` +
+        `💥 ${attacker.name} 𝘁𝘢𝘬𝗲𝘀 10 𝗿𝗲𝗳𝗹𝗲𝗰𝘁𝗲𝗱 𝗱𝗮𝗺𝗮𝗴𝗲!\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💚 ${attacker.name}: ${Math.max(0, attacker.hp)} HP\n` +
+        `💚 ${defender.name}: ${defender.hp} HP`
+      );
+      if (attacker.hp <= 0) {
+        await this.handleFightEnd(message, usersData, fight, defender, attacker, false);
+        return endFight(threadID);
+      }
+      fight.currentPlayer = defender.id;
+      inst.turnMessageSent = false;
+      return resetTimeout(threadID, message);
+    }
+
+    // ── Calculate damage ────────────────────────────────
+    let damage = Math.floor(Math.random() * (move.max - move.min + 1)) + move.min;
+    damage += atkStats.atkBonus;
+    if (atkStats.skills[input]) damage += atkStats.skills[input] * 3;
+
+    const atkTrait = TRAITS[atkStats.trait];
+    const defTrait = TRAITS[defStats.trait];
+    if (atkTrait?.atkBonus) damage += atkTrait.atkBonus;
+
+    let dodgeChance = 0.08 + (defStats.agilityBonus / 200);
+    if (defTrait?.agilityBonus) dodgeChance += defTrait.agilityBonus / 100;
+    if (fight.evadeActive?.id === defender.id) {
+      dodgeChance = fight.evadeActive.chance;
+      delete fight.evadeActive;
+    }
+
+    const isCrit  = Math.random() < 0.15;
+    const isDodge = Math.random() < dodgeChance;
+
+    if (isDodge) {
+      return message.send(
+        `💨 𝗗𝗢𝗗𝗚𝗘𝗗!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `${move.emoji} ${attacker.name} 𝘶𝘴𝘦𝘥 ${input}\n` +
+        `🌪️ ${defender.name} 𝘦𝘷𝘢𝘥𝘦𝘥 𝘵𝘩𝘦 𝘢𝘵𝘵𝘢𝘤𝘬!\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💚 ${attacker.name}: ${attacker.hp} HP\n` +
+        `💚 ${defender.name}: ${defender.hp} HP`
+      ).then(() => {
+        fight.currentPlayer = defender.id;
+        inst.turnMessageSent = false;
+        resetTimeout(threadID, message);
+      });
+    }
+
+    if (isCrit) damage = Math.floor(damage * 1.5);
+
+    let dmgReduction = defStats.defBonus / 100;
+    if (defTrait?.defBonus) dmgReduction += defTrait.defBonus / 100;
+    if (fight.debuffOnDefender) dmgReduction = Math.max(0, dmgReduction - fight.debuffOnDefender / 100);
+
+    let statusLine = "";
+    if (fight.parryActive?.id === defender.id) {
+      const ref = Math.floor(damage * 0.3);
+      attacker.hp -= ref;
+      damage = Math.floor(damage * 0.7);
+      delete fight.parryActive;
+      statusLine += `⚔️ 𝗣𝗔𝗥𝗥𝗬𝗘𝗗! ${def.name} 𝗿𝗲𝗳𝗹𝗲𝗰𝘁𝗲𝗱 ${ref} 𝗱𝗺𝗴!\n`.replace("def.name", defender.name);
+    }
+    if (fight.blockActive?.id === defender.id) {
+      damage = Math.floor(damage * (1 - fight.blockActive.reduction));
+      delete fight.blockActive;
+      statusLine += `🛡️ 𝗕𝗟𝗢𝗖𝗞𝗘𝗗! 𝗗𝗮𝗺𝗮𝗴𝗲 𝗿𝗲𝗱𝘂𝗰𝗲𝗱!\n`;
+    }
+    if (atkTrait?.debuff) {
+      fight.debuffOnDefender = (fight.debuffOnDefender || 0) + atkTrait.debuff;
+      statusLine += `☠️ 𝗖𝗨𝗥𝗦𝗘! ${defender.name} −${atkTrait.debuff}% 𝗱𝗲𝗳!\n`;
+    }
+
+    damage = Math.max(1, Math.floor(damage * (1 - dmgReduction)));
+    defender.hp -= damage;
+
+    // Phoenix survival
+    if (defender.hp <= 0 && defTrait?.revive) {
+      fight.phoenixUsed = fight.phoenixUsed || {};
+      if (!fight.phoenixUsed[defender.id]) {
+        fight.phoenixUsed[defender.id] = true;
+        defender.hp = 1;
+        statusLine += `🔥 𝗣𝗛𝗢𝗘𝗡𝗜𝗫 𝗕𝗟𝗢𝗢𝗗! ${defender.name} 𝘴𝘶𝘳𝘷𝘪𝘷𝘦𝘴 𝘸𝘪𝘵𝘩 1 HP!\n`;
+      }
+    }
+
+    const header = isCrit
+      ? `💥 𝗖𝗥𝗜𝗧𝗜𝗖𝗔𝗟 𝗛𝗜𝗧!\n━━━━━━━━━━━━━━━━━━━━━━\n`
+      : `⚔️ 𝗔𝗧𝗧𝗔𝗖𝗞!\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+    const msgOut =
+      header +
+      statusLine +
+      `${move.emoji} ${attacker.name} 𝘶𝘴𝘦𝘥 𝗯𝗼𝗹𝗱 ${input}\n` +
+      `💥 ${defender.name} 𝘁𝗼𝗼𝗸 ${damage} 𝗱𝗮𝗺𝗮𝗴𝗲\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `💚 ${attacker.name}: ${Math.max(0, attacker.hp)} HP\n` +
+      (defender.hp > 0
+        ? `💛 ${defender.name}: ${Math.max(0, defender.hp)} HP`
+        : `💀 ${defender.name}: 𝗞.𝗢.`);
+
+    await message.send(msgOut);
+
+    if (defender.hp <= 0) {
+      setTimeout(async () => {
+        await this.handleFightEnd(message, usersData, fight, attacker, defender, false);
+        endFight(threadID);
+      }, 1000);
+      return;
+    }
+
+    fight.currentPlayer = defender.id;
+    inst.turnMessageSent = false;
+    resetTimeout(threadID, message);
   },
 
-  startFight: async function(message, usersData, fightData) {
+  // ───────────────────────────────────────────────────────────
+  startFight: async function (message, usersData, fightData) {
     const { challengerID, challengerName, opponentID, opponentName, threadID, mode, challengerBet, opponentBet } = fightData;
 
     const fight = {
       participants: [
         { id: challengerID, name: challengerName, hp: 100 },
-        { id: opponentID, name: opponentName, hp: 100 }
+        { id: opponentID,   name: opponentName,   hp: 100 },
       ],
       currentPlayer: Math.random() < 0.5 ? challengerID : opponentID,
-      threadID: threadID,
-      mode: mode,
+      threadID, mode,
       challengerBet: challengerBet || 0,
-      opponentBet: opponentBet || 0
+      opponentBet:   opponentBet   || 0,
     };
 
-    const gameInstance = {
-      fight: fight,
-      timeoutID: null,
-      turnMessageSent: false,
-    };
-
-    gameInstances.set(threadID, gameInstance);
+    gameInstances.set(threadID, { fight, timeoutID: null, turnMessageSent: false });
     ongoingFights.set(threadID, fight);
 
-    const attackList = ["𝘬𝘪𝘤𝘬", "𝘱𝘶𝘯𝘤𝘩", "𝘴𝘭𝘢𝘱", "𝘩𝘦𝘢𝘥𝘣𝘶𝘵𝘵", "𝘦𝘭𝘣𝘰𝘸", "𝘶𝘱𝘱𝘦𝘳𝘤𝘶𝘵", "𝘣𝘢𝘤𝘬𝘴𝘭𝘢𝘴𝘩"];
+    const first = fight.currentPlayer === challengerID ? challengerName : opponentName;
+    const modeText = mode === "bet"
+      ? `💰 𝗕𝗘𝗧 𝗠𝗔𝗧𝗖𝗛\n   ${challengerName}: $${challengerBet.toLocaleString()}\n   ${opponentName}: $${opponentBet.toLocaleString()}\n   🏆 𝗣𝗼𝗼𝗹: $${(challengerBet + opponentBet).toLocaleString()}`
+      : `🤝 𝗙𝗥𝗜𝗘𝗡𝗗𝗟𝗬 𝗠𝗔𝗧𝗖𝗛\n   🏆 𝗣𝗿𝗶𝘇𝗲: $50,000,000`;
 
-    let modeText = mode === 'bet'
-      ? `💰 𝗕𝗘𝗧 𝗠𝗔𝗧𝗖𝗛\n${challengerName}: $${challengerBet.toLocaleString()}\n${opponentName}: $${opponentBet.toLocaleString()}\n🏆 𝘗𝘳𝘪𝘻𝘦 𝘗𝘰𝘰𝘭: $${(challengerBet + opponentBet).toLocaleString()}`
-      : `🤝 𝗙𝗥𝗜𝗘𝗡𝗗𝗟𝗬 𝗠𝗔𝗧𝗖𝗛\n🏆 𝘗𝘳𝘪𝘻𝘦: $50,000,000`;
-
-    message.send(
-      `🤺 𝗧𝗛𝗘 𝗗𝗨𝗘𝗟 𝗕𝗘𝗚𝗜𝗡𝗦!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `${modeText}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `👤 ${challengerName} 𝘷𝘴 ${opponentName}\n` +
-      `⚔️ 𝗙𝗶𝗿𝘀𝘁 𝗧𝘂𝗿𝗻: ${fight.currentPlayer === challengerID ? challengerName : opponentName}\n\n` +
-      `💡 𝗔𝘃𝗮𝗶𝗹𝗮𝗯𝗹𝗲 𝗠𝗼𝘃𝗲𝘀:\n${attackList.join(", ")}\n` +
+    await message.send(
+      `🤺 𝗧𝗛𝗘 𝗗𝗨𝗘𝗟 𝗕𝗘𝗚𝗜𝗡𝗦!\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `⏱️ 𝘛𝘪𝘮𝘦 𝘓𝘪𝘮𝘪𝘵: ${TIMEOUT_SECONDS}s | Type "forfeit" to surrender`
+      `${modeText}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `👤 ${challengerName}  𝘷𝘴  ${opponentName}\n` +
+      `⚡ 𝗙𝗶𝗿𝘀𝘁: ${first}\n\n` +
+      `💡 𝗕𝗮𝘀𝗶𝗰: 𝘱𝘶𝘯𝘤𝘩, 𝘬𝘪𝘤𝘬, 𝘴𝘭𝘢𝘱, 𝘩𝘦𝘢𝘥𝘣𝘶𝘵𝘵, 𝘦𝘭𝘣𝘰𝘸, 𝘶𝘱𝘱𝘦𝘳𝘤𝘶𝘵\n` +
+      `💥 𝗣𝗼𝘄𝗲𝗿: 𝘣𝘢𝘤𝘬𝘴𝘭𝘢𝘴𝘩, 𝘥𝘳𝘰𝘱𝘬𝘪𝘤𝘬, 𝘴𝘶𝘱𝘭𝘦𝘹, 𝘩𝘢𝘺𝘮𝘢𝘬𝘦𝘳, 𝘴𝘵𝘰𝘮𝘱\n` +
+      `🔒 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 (𝘂𝗻𝗹𝗼𝗰𝗸𝗮𝗯𝗹𝗲): 𝘥𝘦𝘢𝘵𝘩𝘣𝘭𝘰𝘸, 𝘴𝘰𝘯𝘪𝘤𝘧𝘪𝘴𝘵, 𝘴𝘩𝘰𝘤𝘬𝘸𝘢𝘷𝘦, 𝘣𝘭𝘢𝘻𝘦𝘬𝘪𝘤𝘬\n` +
+      `🛡️ 𝗗𝗲𝗳𝗲𝗻𝘀𝗲: 𝘣𝘭𝘰𝘤𝘬, 𝘱𝘢𝘳𝘳𝘺, 𝘤𝘰𝘶𝘯𝘵𝘦𝘳, 𝘦𝘷𝘢𝘥𝘦\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `⏱️ ${TIMEOUT_SECONDS}𝘴 𝘵𝘪𝘮𝘦𝘳 | "𝘧𝘰𝘳𝘧𝘦𝘪𝘵" 𝘵𝘰 𝘴𝘶𝘳𝘳𝘦𝘯𝘥𝘦𝘳`
     );
 
-    // Deduct bets if bet mode
-    if (mode === 'bet') {
-      await usersData.set(challengerID, { money: (await usersData.get(challengerID)).money - challengerBet });
-      await usersData.set(opponentID, { money: (await usersData.get(opponentID)).money - opponentBet });
+    if (mode === "bet") {
+      const [cD, oD] = await Promise.all([usersData.get(challengerID), usersData.get(opponentID)]);
+      await usersData.set(challengerID, { money: cD.money - challengerBet });
+      await usersData.set(opponentID,   { money: oD.money - opponentBet   });
     }
 
     startTimeout(threadID, message);
-    
-    // Clear pending challenge
-    for (const [key, value] of pendingChallenges.entries()) {
-      if (value.threadID === threadID && 
-          (value.challengerID === challengerID || value.opponentID === opponentID)) {
-        pendingChallenges.delete(key);
-      }
+
+    for (const [k, v] of pendingChallenges.entries()) {
+      if (v.threadID === threadID && (v.challengerID === challengerID || v.opponentID === opponentID))
+        pendingChallenges.delete(k);
     }
   },
 
-  handleFightEnd: async function(message, usersData, fight, winner, loser, forfeited) {
-    const { mode, challengerBet, opponentBet } = fight;
-
-    // Update stats
+  // ───────────────────────────────────────────────────────────
+  handleFightEnd: async function (message, usersData, fight, winner, loser, forfeited) {
     const winnerData = await usersData.get(winner.id);
-    const loserData = await usersData.get(loser.id);
+    const loserData  = await usersData.get(loser.id);
+    const wStats     = getStats(winnerData);
+    const lStats     = getStats(loserData);
 
-    const newWinnerWins = (winnerData.data.fightWins || 0) + 1;
-    const newLoserLosses = (loserData.data.fightLosses || 0) + 1;
+    const xpGain = forfeited ? 20 : 50;
+    const newXP  = (wStats.xp  || 0) + xpGain;
+    const newLvl = calcLevel({ ...wStats, xp: newXP });
+    const newWins   = (wStats.wins   || 0) + 1;
+    const newLosses = (lStats.losses || 0) + 1;
 
-    let winnings = 0;
-    let finalMsg = "";
+    const winnings = fight.mode === "bet"
+      ? fight.challengerBet + fight.opponentBet
+      : 50_000_000;
 
-    if (mode === 'bet') {
-      winnings = challengerBet + opponentBet;
-      await usersData.set(winner.id, {
-        money: winnerData.money + winnings,
-        data: { ...winnerData.data, fightWins: newWinnerWins }
-      });
-
-      finalMsg = `🏆 𝗩𝗜𝗖𝗧𝗢𝗥𝗬!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `👑 ${winner.name} ${forfeited ? '𝘸𝘪𝘯𝘴 𝘣𝘺 𝘧𝘰𝘳𝘧𝘦𝘪𝘵' : '𝘩𝘢𝘴 𝘥𝘦𝘧𝘦𝘢𝘵𝘦𝘥'} ${loser.name}!\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💰 𝗪𝗶𝗻𝗻𝗶𝗻𝗴𝘀: $${winnings.toLocaleString()}\n` +
-        `🏅 𝗧𝗼𝘁𝗮𝗹 𝗩𝗶𝗰𝘁𝗼𝗿𝗶𝗲𝘀: ${newWinnerWins}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `🎉 𝘎𝘎 𝘞𝘗!`;
-    } else {
-      winnings = 50000000;
-      await usersData.set(winner.id, {
-        money: winnerData.money + winnings,
-        data: { ...winnerData.data, fightWins: newWinnerWins }
-      });
-
-      finalMsg = `🏆 𝗩𝗜𝗖𝗧𝗢𝗥𝗬!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `👑 ${winner.name} ${forfeited ? '𝘸𝘪𝘯𝘴 𝘣𝘺 𝘧𝘰𝘳𝘧𝘦𝘪𝘵' : '𝘩𝘢𝘴 𝘥𝘦𝘧𝘦𝘢𝘵𝘦𝘥'} ${loser.name}!\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `🎁 𝗣𝗿𝗶𝘇𝗲: $${winnings.toLocaleString()}\n` +
-        `🏅 𝗧𝗼𝘁𝗮𝗹 𝗩𝗶𝗰𝘁𝗼𝗿𝗶𝗲𝘀: ${newWinnerWins}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `🎉 𝘎𝘎 𝘞𝘗!`;
-    }
-
+    await usersData.set(winner.id, {
+      money: winnerData.money + winnings,
+      data: { ...winnerData.data, fightWins: newWins, fightXP: newXP, fightLevel: newLvl },
+    });
     await usersData.set(loser.id, {
-      data: { ...loserData.data, fightLosses: newLoserLosses }
+      data: { ...loserData.data, fightLosses: newLosses },
     });
 
-    message.send(finalMsg);
-  }
+    const lvlUp = newLvl > wStats.level ? `\n🆙 𝗟𝗘𝗩𝗘𝗟 𝗨𝗣! Now 𝗟𝘃.${newLvl}!` : "";
+
+    await message.send(
+      `🏆 𝗩𝗜𝗖𝗧𝗢𝗥𝗬!\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `👑 ${winner.name} ${forfeited ? "𝘸𝘪𝘯𝘴 𝘣𝘺 𝘧𝘰𝘳𝘧𝘦𝘪𝘵" : "𝘥𝘦𝘧𝘦𝘢𝘵𝘴"} ${loser.name}!\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `${fight.mode === "bet" ? "💰 𝗪𝗶𝗻𝗻𝗶𝗻𝗴𝘀" : "🎁 𝗣𝗿𝗶𝘇𝗲"}: $${winnings.toLocaleString()}\n` +
+      `🏅 𝗩𝗶𝗰𝘁𝗼𝗿𝗶𝗲𝘀: ${newWins}\n` +
+      `✨ 𝗫𝗣 𝗚𝗮𝗶𝗻𝗲𝗱: +${xpGain}${lvlUp}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎉 𝘎𝘎 𝘞𝘗!`
+    );
+  },
 };
 
+// ═══════════════════════════════════════════════════════════════
+//   TIMEOUT UTILITIES
+// ═══════════════════════════════════════════════════════════════
 function startTimeout(threadID, message) {
-  const timeoutID = setTimeout(() => {
-    if (gameInstances.has(threadID)) {
-      const fight = gameInstances.get(threadID).fight;
-      message.send(
-        `⏰ 𝗧𝗜𝗠𝗘𝗢𝗨𝗧!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `𝘛𝘩𝘦 𝘧𝘪𝘨𝘩𝘵 𝘩𝘢𝘴 𝘣𝘦𝘦𝘯 𝘤𝘢𝘯𝘤𝘦𝘭𝘭𝘦𝘥.\n` +
-        `${fight.mode === 'bet' ? '💰 𝘉𝘦𝘵𝘴 𝘩𝘢𝘷𝘦 𝘣𝘦𝘦𝘯 𝘳𝘦𝘧𝘶𝘯𝘥𝘦𝘥.' : ''}`
-      );
-      
-      // Refund bets if timeout
-      if (fight.mode === 'bet') {
-        const usersData = global.GoatBot.usersData;
-        usersData.get(fight.participants[0].id).then(data => {
-          usersData.set(fight.participants[0].id, { money: data.money + fight.challengerBet });
-        });
-        usersData.get(fight.participants[1].id).then(data => {
-          usersData.set(fight.participants[1].id, { money: data.money + fight.opponentBet });
-        });
-      }
-      
-      endFight(threadID);
+  const id = setTimeout(async () => {
+    if (!gameInstances.has(threadID)) return;
+    const { fight } = gameInstances.get(threadID);
+    await message.send(
+      `⏰ 𝗧𝗜𝗠𝗘𝗢𝗨𝗧!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `𝘍𝘪𝘨𝘩𝘵 𝘤𝘢𝘯𝘤𝘦𝘭𝘭𝘦𝘥 𝘥𝘶𝘦 𝘵𝘰 𝘪𝘯𝘢𝘤𝘵𝘪𝘷𝘪𝘵𝘺.\n` +
+      (fight.mode === "bet" ? "💰 𝘉𝘦𝘵𝘴 𝘳𝘦𝘧𝘶𝘯𝘥𝘦𝘥." : "")
+    );
+    if (fight.mode === "bet") {
+      const ud = global.GoatBot.usersData;
+      const [d0, d1] = await Promise.all([
+        ud.get(fight.participants[0].id),
+        ud.get(fight.participants[1].id),
+      ]);
+      await ud.set(fight.participants[0].id, { money: d0.money + fight.challengerBet });
+      await ud.set(fight.participants[1].id, { money: d1.money + fight.opponentBet   });
     }
+    endFight(threadID);
   }, TIMEOUT_SECONDS * 1000);
-  gameInstances.get(threadID).timeoutID = timeoutID;
+  gameInstances.get(threadID).timeoutID = id;
 }
 
 function resetTimeout(threadID, message) {
-  const instance = gameInstances.get(threadID);
-  if (instance?.timeoutID) {
-    clearTimeout(instance.timeoutID);
-    startTimeout(threadID, message);
-  }
+  const inst = gameInstances.get(threadID);
+  if (inst?.timeoutID) { clearTimeout(inst.timeoutID); startTimeout(threadID, message); }
 }
 
 function endFight(threadID) {
-  const instance = gameInstances.get(threadID);
-  if (instance?.timeoutID) clearTimeout(instance.timeoutID);
+  const inst = gameInstances.get(threadID);
+  if (inst?.timeoutID) clearTimeout(inst.timeoutID);
   ongoingFights.delete(threadID);
   gameInstances.delete(threadID);
 }
