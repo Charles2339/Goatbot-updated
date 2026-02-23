@@ -74,6 +74,20 @@ const SHOP = {
       desc:  "+5% dodge chance per level (max 10 levels, cap 50%).",
       maxLevel: 10, type: "passive", stat: "fightAgilityBonus", gain: 5,
     },
+    hpup: {
+      label: "𝗛𝗲𝗮𝗹𝘁𝗵 𝗕𝗼𝗼𝘀𝘁", cost: 5_000_000,
+      desc:  "+50 max HP per purchase (no level cap — stack as much as you want!).",
+      maxLevel: Infinity, type: "hpup",
+    },
+  },
+
+  // ── Unlockable In-Fight Abilities ────────────────────────
+  abilities: {
+    heal: {
+      label: "𝗛𝗲𝗮𝗹", cost: 100_000_000,
+      desc:  "Unlock the 'heal' in-fight action — restores 50% of your max HP once per fight.",
+      type: "ability",
+    },
   },
 };
 
@@ -82,6 +96,7 @@ const ALL_ITEMS = {
   ...SHOP.traits,
   ...SHOP.specialAttacks,
   ...SHOP.passives,
+  ...SHOP.abilities,
 };
 
 function fmt(n) { return `$${BigInt(Math.round(n)).toLocaleString()}`; }
@@ -212,6 +227,51 @@ module.exports = {
         );
       }
 
+      // ── HP Upgrade ───────────────────────────────────────
+      if (item.type === "hpup") {
+        if (userData.money < item.cost)
+          return message.send(`❌ 𝗜𝗻𝘀𝘂𝗳𝗳𝗶𝗰𝗶𝗲𝗻𝘁 𝗳𝘂𝗻𝗱𝘀!\n💵 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: ${fmt(userData.money)}\n💸 𝗡𝗲𝗲𝗱: ${fmt(item.cost)}`);
+
+        const curHP    = data.fightBonusHP || 0;
+        const newHP    = curHP + 50;
+        const newMoney = userData.money - item.cost;
+
+        await usersData.set(senderID, {
+          money: newMoney,
+          data: { ...data, fightBonusHP: newHP },
+        });
+        return message.send(
+          `✅ 𝗛𝗲𝗮𝗹𝘁𝗵 𝗨𝗽𝗴𝗿𝗮𝗱𝗲𝗱!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `❤️ 𝗠𝗮𝘅 𝗛𝗣: ${100 + curHP} → ${100 + newHP}\n` +
+          `💪 +50 𝗛𝗣 𝗮𝗱𝗱𝗲𝗱 𝘁𝗼 𝘆𝗼𝘂𝗿 𝗳𝗶𝗴𝗵𝘁 𝗽𝗼𝗼𝗹!\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `💰 𝗥𝗲𝗺𝗮𝗶𝗻𝗶𝗻𝗴: ${fmt(newMoney)}\n` +
+          `🔼 𝘉𝘶𝘺 𝘢𝘨𝘢𝘪𝘯 𝘧𝘰𝘳 𝘢𝘯𝘰𝘵𝘩𝘦𝘳 +50 𝘏𝘗!`
+        );
+      }
+
+      // ── Ability unlock ───────────────────────────────────
+      if (item.type === "ability") {
+        const abilities = data.fightAbilities || {};
+        if (abilities[id])
+          return message.send(`✅ 𝗬𝗼𝘂 𝗮𝗹𝗿𝗲𝗮𝗱𝘆 𝗼𝘄𝗻 ${item.label}.`);
+        if (userData.money < item.cost)
+          return message.send(`❌ 𝗜𝗻𝘀𝘂𝗳𝗳𝗶𝗰𝗶𝗲𝗻𝘁 𝗳𝘂𝗻𝗱𝘀!\n💵 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: ${fmt(userData.money)}\n💸 𝗡𝗲𝗲𝗱: ${fmt(item.cost)}`);
+
+        abilities[id] = true;
+        await usersData.set(senderID, {
+          money: userData.money - item.cost,
+          data: { ...data, fightAbilities: abilities },
+        });
+        return message.send(
+          `✅ 𝗔𝗯𝗶𝗹𝗶𝘁𝘆 𝗨𝗻𝗹𝗼𝗰𝗸𝗲𝗱!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `💚 ${item.label} 𝗶𝘀 𝗻𝗼𝘄 𝘂𝘀𝗮𝗯𝗹𝗲 𝗶𝗻 𝗳𝗶𝗴𝗵𝘁!\n` +
+          `📋 ${item.desc}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `💰 𝗥𝗲𝗺𝗮𝗶𝗻𝗶𝗻𝗴: ${fmt(userData.money - item.cost)}`
+        );
+      }
+
       return message.send("❌ 𝗨𝗻𝗸𝗻𝗼𝘄𝗻 𝗶𝘁𝗲𝗺 𝘁𝘆𝗽𝗲.");
     }
 
@@ -233,7 +293,16 @@ module.exports = {
 
     msg += `\n📈 𝗣𝗔𝗦𝗦𝗜𝗩𝗘 𝗨𝗣𝗚𝗥𝗔𝗗𝗘𝗦 (𝗣𝗲𝗿 𝗹𝗲𝘃𝗲𝗹, 𝗖𝗼𝘀𝘁 𝘀𝗰𝗮𝗹𝗲𝘀)\n`;
     for (const [id, item] of Object.entries(SHOP.passives)) {
-      msg += `  [${id}] ${item.label} — ${fmt(item.cost)}/𝗹𝘃𝗹 × 𝗹𝗲𝘃𝗲𝗹 (𝗺𝗮𝘅 ${item.maxLevel})\n`;
+      if (item.type === "hpup") {
+        msg += `  [${id}] ${item.label} — ${fmt(item.cost)} per +50 HP (𝗻𝗼 𝗰𝗮𝗽)\n`;
+      } else {
+        msg += `  [${id}] ${item.label} — ${fmt(item.cost)}/𝗹𝘃𝗹 × 𝗹𝗲𝘃𝗲𝗹 (𝗺𝗮𝘅 ${item.maxLevel})\n`;
+      }
+    }
+
+    msg += `\n💚 𝗜𝗡-𝗙𝗜𝗚𝗛𝗧 𝗔𝗕𝗜𝗟𝗜𝗧𝗜𝗘𝗦 (𝗨𝘀𝗲𝗮𝗯𝗹𝗲 𝗱𝘂𝗿𝗶𝗻𝗴 𝗯𝗮𝘁𝘁𝗹𝗲)\n`;
+    for (const [id, item] of Object.entries(SHOP.abilities)) {
+      msg += `  [${id}] ${item.label} — ${fmt(item.cost)}\n`;
     }
 
     msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;

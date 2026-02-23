@@ -44,6 +44,8 @@ function getStats(userData) {
     atkBonus:     d.fightAtkBonus     || 0,   // flat damage bonus
     defBonus:     d.fightDefBonus     || 0,   // % damage reduction (0–80)
     agilityBonus: d.fightAgilityBonus || 0,   // extra % dodge chance (0–50)
+    bonusHP:      d.fightBonusHP      || 0,   // extra max HP purchased
+    abilities:    d.fightAbilities    || {},  // { heal: true, ... }
     trait:        d.fightTrait        || null,
     skills:       d.fightSkills       || {},  // { skillId: level }
     trainedAt:    d.fightTrainedAt    || 0,
@@ -84,8 +86,9 @@ module.exports = {
         "{pn} topfighter — 🏆 Leaderboard\n" +
         "Attacks: punch, kick, slap, headbutt, elbow, uppercut,\n" +
         "         backslash, dropkick, suplex, haymaker, stomp (power)\n" +
-        "Special: deathblow, sonicfist, shockwave, blazekick (unlock via +fight upgrade)\n" +
+        "Special: deathblow, sonicfist, shockwave, blazekick (unlock via +fightupgrade)\n" +
         "Defense: block, parry, counter, evade\n" +
+        "Ability: heal (unlock via +fightupgrade — restores 50% HP, once per fight)\n" +
         "Type 'forfeit' to surrender.",
     },
   },
@@ -270,6 +273,51 @@ module.exports = {
       return endFight(threadID);
     }
 
+    // ── Heal action ───────────────────────────────────────
+    if (input === "heal") {
+      const healerData  = await usersData.get(senderID);
+      const healerStats = getStats(healerData);
+
+      if (!healerStats.abilities?.heal)
+        return message.send(
+          `🔒 𝗛𝗲𝗮𝗹 𝗻𝗼𝘁 𝘂𝗻𝗹𝗼𝗰𝗸𝗲𝗱!\n` +
+          `𝘗𝘶𝘳𝘤𝘩𝘢𝘴𝘦 𝘪𝘵 𝘧𝘰𝘳 $100,000,000 𝘶𝘴𝘪𝘯𝘨 +𝘧𝘪𝘨𝘩𝘵𝘶𝘱𝘨𝘳𝘢𝘥𝘦 𝘣𝘶𝘺 𝘩𝘦𝘢𝘭`
+        );
+
+      const healer = fight.participants.find(p => p.id === senderID);
+
+      if (fight.healUsed?.[senderID])
+        return message.send(
+          `❌ 𝗬𝗼𝘂'𝘃𝗲 𝗮𝗹𝗿𝗲𝗮𝗱𝘆 𝘂𝘀𝗲𝗱 𝗵𝗲𝗮𝗹 𝘁𝗵𝗶𝘀 𝗳𝗶𝗴𝗵𝘁!\n` +
+          `💚 𝗛𝗣: ${healer.hp}/${healer.maxHP}`
+        );
+
+      fight.healUsed = fight.healUsed || {};
+      fight.healUsed[senderID] = true;
+
+      const healAmt  = Math.floor(healer.maxHP * 0.5);
+      const oldHP    = healer.hp;
+      healer.hp      = Math.min(healer.maxHP, healer.hp + healAmt);
+      const restored = healer.hp - oldHP;
+
+      const defender = fight.participants.find(p => p.id !== senderID);
+
+      await message.send(
+        `💚 𝗛𝗘𝗔𝗟!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `✨ ${healer.name} 𝘳𝘦𝘤𝘰𝘷𝘦𝘳𝘴 ${restored} 𝗛𝗣!\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💚 ${healer.name}: ${healer.hp}/${healer.maxHP} HP\n` +
+        `💛 ${defender.name}: ${Math.max(0, defender.hp)}/${defender.maxHP} HP\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚠️ 𝘏𝘦𝘢𝘭 𝘤𝘢𝘯 𝘰𝘯𝘭𝘺 𝘣𝘦 𝘶𝘴𝘦𝘥 𝘰𝘯𝘤𝘦 𝘱𝘦𝘳 𝘧𝘪𝘨𝘩𝘵!`
+      );
+
+      fight.currentPlayer = defender.id;
+      inst.turnMessageSent = false;
+      resetTimeout(threadID, message);
+      return;
+    }
+
     const attacker = fight.participants.find(p => p.id === senderID);
     const defender = fight.participants.find(p => p.id !== senderID);
     const atkData  = await usersData.get(attacker.id);
@@ -435,10 +483,17 @@ module.exports = {
   startFight: async function (message, usersData, fightData) {
     const { challengerID, challengerName, opponentID, opponentName, threadID, mode, challengerBet, opponentBet } = fightData;
 
+    const cData  = await usersData.get(challengerID);
+    const oData  = await usersData.get(opponentID);
+    const cStats = getStats(cData);
+    const oStats = getStats(oData);
+    const cMaxHP = 100 + cStats.bonusHP;
+    const oMaxHP = 100 + oStats.bonusHP;
+
     const fight = {
       participants: [
-        { id: challengerID, name: challengerName, hp: 100 },
-        { id: opponentID,   name: opponentName,   hp: 100 },
+        { id: challengerID, name: challengerName, hp: cMaxHP, maxHP: cMaxHP },
+        { id: opponentID,   name: opponentName,   hp: oMaxHP, maxHP: oMaxHP },
       ],
       currentPlayer: Math.random() < 0.5 ? challengerID : opponentID,
       threadID, mode,
@@ -459,20 +514,20 @@ module.exports = {
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `${modeText}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `👤 ${challengerName}  𝘷𝘴  ${opponentName}\n` +
+      `👤 ${challengerName} (${cMaxHP}HP)  𝘷𝘴  ${opponentName} (${oMaxHP}HP)\n` +
       `⚡ 𝗙𝗶𝗿𝘀𝘁: ${first}\n\n` +
       `💡 𝗕𝗮𝘀𝗶𝗰: 𝘱𝘶𝘯𝘤𝘩, 𝘬𝘪𝘤𝘬, 𝘴𝘭𝘢𝘱, 𝘩𝘦𝘢𝘥𝘣𝘶𝘵𝘵, 𝘦𝘭𝘣𝘰𝘸, 𝘶𝘱𝘱𝘦𝘳𝘤𝘶𝘵\n` +
       `💥 𝗣𝗼𝘄𝗲𝗿: 𝘣𝘢𝘤𝘬𝘴𝘭𝘢𝘴𝘩, 𝘥𝘳𝘰𝘱𝘬𝘪𝘤𝘬, 𝘴𝘶𝘱𝘭𝘦𝘹, 𝘩𝘢𝘺𝘮𝘢𝘬𝘦𝘳, 𝘴𝘵𝘰𝘮𝘱\n` +
       `🔒 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 (𝘂𝗻𝗹𝗼𝗰𝗸𝗮𝗯𝗹𝗲): 𝘥𝘦𝘢𝘵𝘩𝘣𝘭𝘰𝘸, 𝘴𝘰𝘯𝘪𝘤𝘧𝘪𝘴𝘵, 𝘴𝘩𝘰𝘤𝘬𝘸𝘢𝘷𝘦, 𝘣𝘭𝘢𝘻𝘦𝘬𝘪𝘤𝘬\n` +
       `🛡️ 𝗗𝗲𝗳𝗲𝗻𝘀𝗲: 𝘣𝘭𝘰𝘤𝘬, 𝘱𝘢𝘳𝘳𝘺, 𝘤𝘰𝘶𝘯𝘵𝘦𝘳, 𝘦𝘷𝘢𝘥𝘦\n` +
+      `💚 𝗔𝗯𝗶𝗹𝗶𝘁𝘆: 𝘩𝘦𝘢𝘭 (𝘶𝘯𝘭𝘰𝘤𝘬𝘢𝘣𝘭𝘦 — 50% 𝘏𝘗, 1×/𝘧𝘪𝘨𝘩𝘵)\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `⏱️ ${TIMEOUT_SECONDS}𝘴 𝘵𝘪𝘮𝘦𝘳 | "𝘧𝘰𝘳𝘧𝘦𝘪𝘵" 𝘵𝘰 𝘴𝘶𝘳𝘳𝘦𝘯𝘥𝘦𝘳`
     );
 
     if (mode === "bet") {
-      const [cD, oD] = await Promise.all([usersData.get(challengerID), usersData.get(opponentID)]);
-      await usersData.set(challengerID, { money: cD.money - challengerBet });
-      await usersData.set(opponentID,   { money: oD.money - opponentBet   });
+      await usersData.set(challengerID, { money: cData.money - challengerBet });
+      await usersData.set(opponentID,   { money: oData.money - opponentBet   });
     }
 
     startTimeout(threadID, message);

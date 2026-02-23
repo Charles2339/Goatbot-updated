@@ -72,6 +72,9 @@ module.exports = {
     const atkBonus     = d.fightAtkBonus     || 0;
     const defBonus     = d.fightDefBonus     || 0;
     const agilityBonus = d.fightAgilityBonus || 0;
+    const bonusHP      = d.fightBonusHP      || 0;
+    const maxHP        = 100 + bonusHP;
+    const abilities    = d.fightAbilities    || {};
 
     // Rank based on level + wins
     const rankScore = level * 10 + wins;
@@ -122,9 +125,11 @@ module.exports = {
       `💀 𝗟𝗼𝘀𝘀𝗲𝘀: ${losses}\n` +
       `📈 𝗪𝗶𝗻 𝗥𝗮𝘁𝗲: ${wr}%\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `❤️ 𝗠𝗮𝘅 𝗛𝗣:          ${maxHP}${bonusHP > 0 ? ` (+${bonusHP} 𝘂𝘱𝗴𝗿𝗮𝗱𝗲𝗱)` : ""}\n` +
       `💥 𝗔𝘁𝘁𝗮𝗰𝗸 𝗕𝗼𝗻𝘂𝘀:    +${atkBonus} 𝗱𝗺𝗴\n` +
       `🛡️ 𝗗𝗲𝗳𝗲𝗻𝘀𝗲 𝗕𝗼𝗻𝘂𝘀:  ${defBonus}% 𝗿𝗲𝗱𝘂𝗰𝘁𝗶𝗼𝗻\n` +
       `💨 𝗔𝗴𝗶𝗹𝗶𝘁𝘆 𝗕𝗼𝗻𝘂𝘀:  +${agilityBonus}% 𝗱𝗼𝗱𝗴𝗲\n` +
+      `💚 𝗛𝗲𝗮𝗹 𝗔𝗯𝗶𝗹𝗶𝘁𝘆:   ${abilities.heal ? "✅ 𝗨𝗻𝗹𝗼𝗰𝗸𝗲𝗱" : "🔒 𝗟𝗼𝗰𝗸𝗲𝗱"}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n`;
 
     // Trait
