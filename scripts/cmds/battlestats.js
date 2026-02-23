@@ -1,167 +1,444 @@
 // ═══════════════════════════════════════════════════════════════
-//   battlestats.js  —  View your full fighter profile
+//   battlestats.js  —  Visual Fighter Profile Card
+//   Uses canvas + axios (same as pair.js) — no Python needed
 // ═══════════════════════════════════════════════════════════════
 
-const TRAITS = {
-  ironhide:   { label: "🧬 𝗜𝗿𝗼𝗻 𝗛𝗶𝗱𝗲",     desc: "-18% incoming dmg" },
-  shadowstep: { label: "🧬 𝗦𝗵𝗮𝗱𝗼𝘄 𝗦𝘁𝗲𝗽",   desc: "+20% dodge chance" },
-  berserker:  { label: "🧬 𝗕𝗲𝗿𝘀𝗲𝗿𝗸𝗲𝗿",     desc: "+12 flat atk dmg" },
-  cursed:     { label: "🧬 𝗖𝘂𝗿𝘀𝗲𝗱 𝗙𝗶𝘀𝘁",   desc: "-10% opp def per hit" },
-  phoenix:    { label: "🧬 𝗣𝗵𝗼𝗲𝗻𝗶𝘅 𝗕𝗹𝗼𝗼𝗱", desc: "Survive lethal blow (1HP, 1×/fight)" },
-};
+const { createCanvas, loadImage } = require("canvas");
+const axios = require("axios");
+const fs    = require("fs");
+const path  = require("path");
 
-const SPECIAL_SKILL_LABELS = {
-  deathblow: "💀 𝗗𝗲𝗮𝘁𝗵𝗯𝗹𝗼𝘄",
-  sonicfist: "🌪️ 𝗦𝗼𝗻𝗶𝗰𝗙𝗶𝘀𝘁",
-  shockwave: "⚡ 𝗦𝗵𝗼𝗰𝗸𝘄𝗮𝘃𝗲",
-  blazekick: "🔥 𝗕𝗹𝗮𝘇𝗲𝗞𝗶𝗰𝗸",
-};
+const BG_URL = "https://i.postimg.cc/PfYNBwQq/file-000000004da471f78bac4b4a4d308e25.jpg";
+const AV_URL = uid =>
+  `https://graph.facebook.com/${uid}/picture?width=512&height=512&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`;
 
+// ── Card dimensions (portrait, matches the bg image ratio) ──────
+const W = 720, H = 1280;
+
+// ── Colors ──────────────────────────────────────────────────────
+const CYAN    = "#64DCFF";
+const WHITE   = "#E6F5FF";
+const DIM     = "#A0C8E6";
+const GREEN   = "#50FF8C";
+const RED     = "#FF6464";
+const YELLOW  = "#FFD250";
+const PURPLE  = "#D2A0FF";
+const GOLD    = "#FFD750";
+const DARK_P  = "rgba(5,20,60,0.75)";
+
+// ── Helpers ─────────────────────────────────────────────────────
+function hexToRgba(hex, alpha = 1) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function glowText(ctx, text, x, y, font, color, glowColor, align = "center", glowRadius = 8) {
+  ctx.save();
+  ctx.font         = font;
+  ctx.textAlign    = align;
+  ctx.textBaseline = "middle";
+  ctx.shadowColor  = glowColor || hexToRgba(color, 0.6);
+  ctx.shadowBlur   = glowRadius;
+  ctx.fillStyle    = color;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function separator(ctx, y, alpha = 0.5) {
+  ctx.save();
+  ctx.strokeStyle = hexToRgba(CYAN, alpha);
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(50, y);
+  ctx.lineTo(W - 50, y);
+  ctx.stroke();
+  // Centre diamond
+  ctx.fillStyle = hexToRgba(CYAN, alpha + 0.2);
+  ctx.beginPath();
+  ctx.moveTo(W/2, y - 5);
+  ctx.lineTo(W/2 + 5, y);
+  ctx.lineTo(W/2, y + 5);
+  ctx.lineTo(W/2 - 5, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r, fill, stroke, strokeW = 1) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  if (fill)   { ctx.fillStyle   = fill;   ctx.fill();   }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = strokeW; ctx.stroke(); }
+}
+
+function xpBar(ctx, x, y, w, h, pct) {
+  // Background
+  roundRect(ctx, x, y, w, h, 4, "rgba(5,20,60,0.8)", hexToRgba(CYAN, 0.3));
+  // Fill gradient
+  if (pct > 0) {
+    const fillW = Math.max(8, Math.floor(w * pct));
+    const grad  = ctx.createLinearGradient(x, y, x + fillW, y);
+    grad.addColorStop(0,   "#0090FF");
+    grad.addColorStop(0.6, "#00C8FF");
+    grad.addColorStop(1,   "#80F0FF");
+    roundRect(ctx, x + 1, y + 1, fillW - 2, h - 2, 3, grad, null);
+    // Shine
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    roundRect(ctx, x + 1, y + 1, fillW - 2, Math.floor(h * 0.4), 3, "rgba(255,255,255,0.15)", null);
+  }
+}
+
+function circleAvatar(ctx, img, cx, cy, r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+}
+
+// ── XP/level helpers ─────────────────────────────────────────────
 function xpForLevel(lvl) { return lvl * 100; }
-
 function getLevelAndXP(totalXP) {
   let lvl = 1, xp = totalXP || 0;
   while (xp >= xpForLevel(lvl)) { xp -= xpForLevel(lvl); lvl++; if (lvl >= 100) break; }
   return { level: lvl, currentXP: xp, xpNeeded: xpForLevel(lvl) };
 }
 
-function progressBar(current, max, length = 10) {
-  const filled = Math.round((current / max) * length);
-  return "█".repeat(Math.min(filled, length)) + "░".repeat(Math.max(0, length - filled));
-}
+// ── Reference data ───────────────────────────────────────────────
+const TRAITS = {
+  ironhide:   { name: "Iron Hide",     desc: "-18% incoming damage"          },
+  shadowstep: { name: "Shadow Step",   desc: "+20% base dodge chance"        },
+  berserker:  { name: "Berserker",     desc: "+12 flat attack damage"        },
+  cursed:     { name: "Cursed Fist",   desc: "-10% opp. defense per hit"     },
+  phoenix:    { name: "Phoenix Blood", desc: "Survive lethal blow (1HP, 1x)" },
+};
+const SPECIAL_NAMES = {
+  deathblow: "Deathblow",
+  sonicfist: "SonicFist",
+  shockwave: "Shockwave",
+  blazekick: "BlazeKick",
+};
+const RANK_DATA = [
+  { min: 500, rank: "Legendary",   color: "#D090FF" },
+  { min: 300, rank: "Grandmaster", color: GOLD      },
+  { min: 150, rank: "Master",      color: GOLD      },
+  { min: 70,  rank: "Expert",      color: "#C8C8C8" },
+  { min: 30,  rank: "Veteran",     color: "#C88050" },
+  { min: 10,  rank: "Competitor",  color: GREEN     },
+  { min: 0,   rank: "Novice",      color: CYAN      },
+];
 
 // ═══════════════════════════════════════════════════════════════
 module.exports = {
   config: {
     name: "battlestats",
     aliases: ["bstats", "fstats", "fighterstats", "battleprofile"],
-    version: "1.0",
-    author: "Charles MK",
-    countDown: 5,
+    version: "2.0",
+    author: "Charles",
+    countDown: 8,
     role: 0,
-    shortDescription: { en: "📊 View your full fighter profile & stats" },
+    shortDescription: { en: "🃏 View your fighter profile card" },
     category: "fun",
     guide: {
       en:
-        "+battlestats           — Your own stats\n" +
-        "+battlestats @mention  — Another user's stats",
+        "+battlestats           — Your fighter card\n" +
+        "+battlestats @mention  — Another user's card",
     },
   },
 
-  onStart: async function ({ event, message, usersData, args }) {
-    let targetID = event.senderID;
+  onStart: async function ({ api, event, message, usersData }) {
+    const { threadID, messageID, senderID, mentions } = event;
 
-    // Allow viewing another user's stats
+    // ── Resolve target ──────────────────────────────────────
+    let targetID = senderID;
     if (event.type === "message_reply") {
       targetID = event.messageReply.senderID;
-    } else if (Object.keys(event.mentions || {}).length > 0) {
-      targetID = Object.keys(event.mentions)[0];
+    } else if (Object.keys(mentions || {}).length > 0) {
+      targetID = Object.keys(mentions)[0];
     }
 
-    const userData = await usersData.get(targetID);
-    const name     = await usersData.getName(targetID);
-    const d        = userData.data || {};
+    const cachePath = path.join(__dirname, "cache", `bstats_${targetID}_${Date.now()}.png`);
+    if (!fs.existsSync(path.join(__dirname, "cache")))
+      fs.mkdirSync(path.join(__dirname, "cache"));
 
-    const { level, currentXP, xpNeeded } = getLevelAndXP(d.fightXP || 0);
+    try {
+      // ── Fetch user data ─────────────────────────────────
+      const userData = await usersData.get(targetID);
+      const name     = await usersData.getName(targetID);
+      const d        = userData.data || {};
 
-    const wins   = d.fightWins   || 0;
-    const losses = d.fightLosses || 0;
-    const total  = wins + losses;
-    const wr     = total > 0 ? ((wins / total) * 100).toFixed(1) : "0.0";
+      const { level, currentXP, xpNeeded } = getLevelAndXP(d.fightXP || 0);
+      const wins         = d.fightWins         || 0;
+      const losses       = d.fightLosses       || 0;
+      const total        = wins + losses;
+      const wr           = total > 0 ? ((wins / total) * 100).toFixed(1) : "0.0";
+      const rankScore    = level * 10 + wins;
+      const rankInfo     = RANK_DATA.find(r => rankScore >= r.min) || RANK_DATA[RANK_DATA.length - 1];
+      const atkBonus     = d.fightAtkBonus     || 0;
+      const defBonus     = d.fightDefBonus     || 0;
+      const agilityBonus = d.fightAgilityBonus || 0;
+      const bonusHP      = d.fightBonusHP      || 0;
+      const maxHP        = 100 + bonusHP;
+      const abilities    = d.fightAbilities    || {};
+      const skills       = d.fightSkills       || {};
+      const traitKey     = d.fightTrait;
+      const traitInfo    = TRAITS[traitKey] || null;
+      const specials     = Object.keys(SPECIAL_NAMES).filter(s => skills[s] >= 1).map(s => SPECIAL_NAMES[s]);
 
-    const atkBonus     = d.fightAtkBonus     || 0;
-    const defBonus     = d.fightDefBonus     || 0;
-    const agilityBonus = d.fightAgilityBonus || 0;
-    const bonusHP      = d.fightBonusHP      || 0;
-    const maxHP        = 100 + bonusHP;
-    const abilities    = d.fightAbilities    || {};
+      const trainedAt     = d.fightTrainedAt || 0;
+      const sinceTraining = Date.now() - trainedAt;
+      const cooldownMs    = 5 * 60 * 60 * 1000;
+      const trainReady    = sinceTraining >= cooldownMs;
+      const remainMs      = cooldownMs - sinceTraining;
+      const hh = Math.floor(remainMs / 3600000);
+      const mm = Math.floor((remainMs % 3600000) / 60000);
 
-    // Rank based on level + wins
-    const rankScore = level * 10 + wins;
-    let rank;
-    if (rankScore >= 500)     rank = "💎 𝗟𝗲𝗴𝗲𝗻𝗱𝗮𝗿𝘆";
-    else if (rankScore >= 300) rank = "🏆 𝗚𝗿𝗮𝗻𝗱𝗺𝗮𝘀𝘁𝗲𝗿";
-    else if (rankScore >= 150) rank = "🥇 𝗠𝗮𝘀𝘁𝗲𝗿";
-    else if (rankScore >= 70)  rank = "🥈 𝗘𝘅𝗽𝗲𝗿𝘁";
-    else if (rankScore >= 30)  rank = "🥉 𝗩𝗲𝘁𝗲𝗿𝗮𝗻";
-    else if (rankScore >= 10)  rank = "🔰 𝗖𝗼𝗺𝗽𝗲𝘁𝗶𝘁𝗼𝗿";
-    else                        rank = "🥋 𝗡𝗼𝘃𝗶𝗰𝗲";
+      // ── Load images ─────────────────────────────────────
+      const [bgImg, avImg] = await Promise.all([
+        loadImage(BG_URL),
+        loadImage(AV_URL(targetID)).catch(() => null),
+      ]);
 
-    const xpBar = progressBar(currentXP, xpNeeded);
+      // ── Canvas setup ─────────────────────────────────────
+      const canvas = createCanvas(W, H);
+      const ctx    = canvas.getContext("2d");
 
-    // ── Build skills section ────────────────────────────────
-    const skills   = d.fightSkills || {};
-    const specials = Object.keys(SPECIAL_SKILL_LABELS).filter(s => skills[s] >= 1);
+      // Background
+      ctx.drawImage(bgImg, 0, 0, W, H);
 
-    // Move skill levels
-    const trainedMoves = Object.entries(skills)
-      .filter(([k]) => !SPECIAL_SKILL_LABELS[k] && skills[k] > 0)
-      .sort((a, b) => b[1] - a[1]);
+      // Dark vignette overlay for readability
+      const vignette = ctx.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, H*0.85);
+      vignette.addColorStop(0, "rgba(0,10,40,0.30)");
+      vignette.addColorStop(1, "rgba(0,5,25,0.72)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
 
-    // ── Trait ──────────────────────────────────────────────
-    const traitKey  = d.fightTrait;
-    const traitInfo = TRAITS[traitKey];
+      // ── Top deco lines ────────────────────────────────────
+      ctx.fillStyle = hexToRgba(CYAN, 0.8);
+      ctx.fillRect(35, 28, W - 70, 2);
+      ctx.fillStyle = hexToRgba(CYAN, 0.35);
+      ctx.fillRect(35, 34, W - 70, 1);
 
-    // ── Training cooldown ──────────────────────────────────
-    const trainedAt = d.fightTrainedAt || 0;
-    const cooldownMs = 5 * 60 * 60 * 1000;
-    const sinceTraining = Date.now() - trainedAt;
-    const canTrain = sinceTraining >= cooldownMs;
-    const remainMs = cooldownMs - sinceTraining;
-    const h = Math.floor(remainMs / 3600000);
-    const m = Math.floor((remainMs % 3600000) / 60000);
-    const trainStatus = canTrain ? "✅ 𝗥𝗲𝗮𝗱𝘆!" : `⏳ ${h}h ${m}m`;
+      // ── BATTLE PROFILE title ──────────────────────────────
+      glowText(ctx, "BATTLE PROFILE", W/2, 72, "bold 48px DejaVu Sans", WHITE, hexToRgba(CYAN, 0.8), "center", 14);
 
-    // ── Compose output ──────────────────────────────────────
-    let msg =
-      `⚔️ 𝗕𝗔𝗧𝗧𝗟𝗘 𝗣𝗥𝗢𝗙𝗜𝗟𝗘\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `👤 𝗡𝗮𝗺𝗲:  ${name}\n` +
-      `🏅 𝗥𝗮𝗻𝗸:  ${rank}\n` +
-      `⭐ 𝗟𝗲𝘃𝗲𝗹: ${level}\n` +
-      `📊 𝗫𝗣:   [${xpBar}] ${currentXP}/${xpNeeded}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🏆 𝗪𝗶𝗻𝘀:   ${wins}\n` +
-      `💀 𝗟𝗼𝘀𝘀𝗲𝘀: ${losses}\n` +
-      `📈 𝗪𝗶𝗻 𝗥𝗮𝘁𝗲: ${wr}%\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `❤️ 𝗠𝗮𝘅 𝗛𝗣:          ${maxHP}${bonusHP > 0 ? ` (+${bonusHP} 𝘂𝘱𝗴𝗿𝗮𝗱𝗲𝗱)` : ""}\n` +
-      `💥 𝗔𝘁𝘁𝗮𝗰𝗸 𝗕𝗼𝗻𝘂𝘀:    +${atkBonus} 𝗱𝗺𝗴\n` +
-      `🛡️ 𝗗𝗲𝗳𝗲𝗻𝘀𝗲 𝗕𝗼𝗻𝘂𝘀:  ${defBonus}% 𝗿𝗲𝗱𝘂𝗰𝘁𝗶𝗼𝗻\n` +
-      `💨 𝗔𝗴𝗶𝗹𝗶𝘁𝘆 𝗕𝗼𝗻𝘂𝘀:  +${agilityBonus}% 𝗱𝗼𝗱𝗴𝗲\n` +
-      `💚 𝗛𝗲𝗮𝗹 𝗔𝗯𝗶𝗹𝗶𝘁𝘆:   ${abilities.heal ? "✅ 𝗨𝗻𝗹𝗼𝗰𝗸𝗲𝗱" : "🔒 𝗟𝗼𝗰𝗸𝗲𝗱"}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      // ── Avatar ────────────────────────────────────────────
+      const cx = W/2, cy = 210, cr = 75;
 
-    // Trait
-    msg += traitInfo
-      ? `${traitInfo.label}\n   𝘌𝘧𝘧𝘦𝘤𝘵: ${traitInfo.desc}\n`
-      : `🧬 𝗧𝗿𝗮𝗶𝘁: 𝘕𝘰𝘯𝘦 (𝘶𝘴𝘦 +𝘧𝘪𝘨𝘩𝘵𝘶𝘱𝘨𝘳𝘢𝘥𝘦)\n`;
+      // Glow rings
+      for (let i = 16; i > 0; i -= 2) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, cr + i, 0, Math.PI * 2);
+        ctx.strokeStyle = hexToRgba(CYAN, 0.04 * i);
+        ctx.lineWidth   = 3;
+        ctx.stroke();
+      }
+      // Rim
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = hexToRgba(CYAN, 0.85);
+      ctx.lineWidth   = 3;
+      ctx.stroke();
 
-    msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      if (avImg) {
+        circleAvatar(ctx, avImg, cx, cy, cr);
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(8,45,120,0.9)";
+        ctx.fill();
+        glowText(ctx, "⚔", cx, cy, `${cr}px DejaVu Sans`, hexToRgba(CYAN, 0.7), CYAN, "center", 10);
+      }
 
-    // Special attacks
-    if (specials.length > 0) {
-      msg += `🔓 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗔𝘁𝘁𝗮𝗰𝗸𝘀:\n`;
-      specials.forEach(s => {
-        msg += `   ${SPECIAL_SKILL_LABELS[s]}\n`;
+      // ── Name ──────────────────────────────────────────────
+      glowText(ctx, name, W/2, 315, "bold 38px DejaVu Sans", WHITE, hexToRgba(CYAN, 0.5), "center", 8);
+
+      // Rank badge
+      const rankFont = "bold 22px Carlito";
+      ctx.font       = rankFont;
+      const rw = ctx.measureText(rankInfo.rank).width + 48;
+      roundRect(ctx, W/2 - rw/2, 330, rw, 34, 8,
+                "rgba(15,8,50,0.8)", hexToRgba(rankInfo.color, 0.7), 1);
+      glowText(ctx, rankInfo.rank, W/2, 347, rankFont, rankInfo.color,
+               hexToRgba(rankInfo.color, 0.6), "center", 6);
+
+      separator(ctx, 378);
+
+      // ── Level + XP ────────────────────────────────────────
+      glowText(ctx, "LV", 62, 406, "20px DejaVu Sans", DIM, null, "left", 0);
+      glowText(ctx, String(level), 100, 402, "bold 38px DejaVu Sans", CYAN, hexToRgba(CYAN, 0.6), "left", 8);
+
+      const barX = 62, barY = 430, barW = W - 124, barH = 22;
+      xpBar(ctx, barX, barY, barW, barH, currentXP / xpNeeded);
+      glowText(ctx, `XP  ${currentXP} / ${xpNeeded}`, W/2, barY + barH/2,
+               "13px DejaVu Sans", WHITE, null, "center", 0);
+
+      separator(ctx, 465);
+
+      // ── Wins / Losses / WR ────────────────────────────────
+      const cw = (W - 80) / 3;
+      const wlData = [
+        { label: "WINS",     val: String(wins),   color: GREEN  },
+        { label: "LOSSES",   val: String(losses), color: RED    },
+        { label: "WIN RATE", val: `${wr}%`,        color: CYAN   },
+      ];
+      wlData.forEach(({ label, val, color }, i) => {
+        const cx_s = 40 + cw * i + cw / 2;
+        glowText(ctx, label, cx_s, 483, "16px DejaVu Sans", DIM, null, "center", 0);
+        glowText(ctx, val, cx_s, 520,   "bold 36px DejaVu Sans", color, hexToRgba(color, 0.55), "center", 8);
       });
-    } else {
-      msg += `🔒 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 𝗔𝘁𝘁𝗮𝗰𝗸𝘀: 𝘕𝘰𝘯𝘦 𝘶𝘯𝘭𝘰𝘤𝘬𝘦𝘥\n`;
-    }
-
-    // Trained moves
-    if (trainedMoves.length > 0) {
-      msg += `\n💪 𝗧𝗿𝗮𝗶𝗻𝗲𝗱 𝗠𝗼𝘃𝗲𝘀:\n`;
-      trainedMoves.slice(0, 8).forEach(([move, lvl]) => {
-        msg += `   ${move}: 𝗟𝘃.${lvl} (+${lvl * 3} 𝗱𝗺𝗴 𝗯𝗼𝗻𝘂𝘀)\n`;
+      // Dividers
+      [40 + cw, 40 + cw * 2].forEach(dx => {
+        ctx.strokeStyle = hexToRgba(CYAN, 0.2);
+        ctx.lineWidth   = 1;
+        ctx.beginPath(); ctx.moveTo(dx, 465); ctx.lineTo(dx, 548); ctx.stroke();
       });
+
+      separator(ctx, 552);
+
+      // ── Combat Stats ──────────────────────────────────────
+      glowText(ctx, "COMBAT STATS", W/2, 572, "bold 22px DejaVu Sans", CYAN, hexToRgba(CYAN, 0.5), "center", 6);
+
+      const statRows = [
+        { label: "❤  MAX HP",   val: `${maxHP} HP`,               color: "#FF6478" },
+        { label: "⚔  ATTACK",   val: `+${atkBonus} DMG`,          color: YELLOW    },
+        { label: "🛡  DEFENSE",  val: `${defBonus}% REDUCTION`,    color: CYAN      },
+        { label: "💨  AGILITY",  val: `+${agilityBonus}% DODGE`,  color: "#96FFA0" },
+        { label: "💚  HEAL",     val: abilities.heal ? "UNLOCKED" : "LOCKED",
+                                  color: abilities.heal ? GREEN : "#909090" },
+      ];
+
+      let rowY = 588;
+      statRows.forEach(({ label, val, color }) => {
+        roundRect(ctx, 46, rowY, W - 92, 36, 4, DARK_P, hexToRgba(CYAN, 0.08));
+        glowText(ctx, label, 66, rowY + 18, "19px DejaVu Sans", DIM, null, "left", 0);
+        glowText(ctx, val, W - 66, rowY + 18, "bold 19px DejaVu Sans", color,
+                 hexToRgba(color, 0.4), "right", 4);
+        rowY += 42;
+      });
+
+      separator(ctx, rowY + 6);
+
+      // ── Inborn Trait ──────────────────────────────────────
+      let traitY = rowY + 24;
+      glowText(ctx, "INBORN TRAIT", W/2, traitY, "bold 22px DejaVu Sans", CYAN,
+               hexToRgba(CYAN, 0.5), "center", 6);
+      traitY += 18;
+
+      if (traitInfo) {
+        roundRect(ctx, 46, traitY, W - 92, 54, 6,
+                  "rgba(20,8,60,0.85)", hexToRgba(PURPLE, 0.5));
+        // Left accent bar
+        ctx.fillStyle = hexToRgba(PURPLE, 0.9);
+        ctx.fillRect(46, traitY, 4, 54);
+        glowText(ctx, `🧬  ${traitInfo.name}`, W/2, traitY + 18,
+                 "bold 21px DejaVu Sans", PURPLE, hexToRgba(PURPLE, 0.6), "center", 5);
+        glowText(ctx, traitInfo.desc, W/2, traitY + 40,
+                 "17px DejaVu Sans", DIM, null, "center", 0);
+      } else {
+        roundRect(ctx, 46, traitY, W - 92, 36, 6,
+                  "rgba(15,15,25,0.7)", hexToRgba(DIM, 0.2));
+        glowText(ctx, "None  —  Purchase via +fightupgrade", W/2, traitY + 18,
+                 "16px DejaVu Sans", DIM, null, "center", 0);
+      }
+
+      separator(ctx, traitY + (traitInfo ? 68 : 50));
+
+      // ── Special Moves ─────────────────────────────────────
+      let specY = traitY + (traitInfo ? 86 : 68);
+      glowText(ctx, "SPECIAL MOVES", W/2, specY, "bold 22px DejaVu Sans", CYAN,
+               hexToRgba(CYAN, 0.5), "center", 6);
+      specY += 18;
+
+      if (specials.length > 0) {
+        const pillW  = 158;
+        const gap    = 14;
+        const totalW = specials.length * pillW + (specials.length - 1) * gap;
+        let sx       = (W - totalW) / 2;
+        specials.slice(0, 4).forEach(sp => {
+          roundRect(ctx, sx, specY, pillW, 38, 6,
+                    "rgba(15,35,110,0.85)", hexToRgba(CYAN, 0.5));
+          // Left accent
+          ctx.fillStyle = hexToRgba(CYAN, 0.8);
+          ctx.fillRect(sx, specY, 3, 38);
+          glowText(ctx, `⚡ ${sp}`, sx + pillW/2, specY + 19,
+                   "bold 17px DejaVu Sans", WHITE, hexToRgba(CYAN, 0.4), "center", 4);
+          sx += pillW + gap;
+        });
+      } else {
+        glowText(ctx, "🔒  None unlocked", W/2, specY + 19,
+                 "17px DejaVu Sans", DIM, null, "center", 0);
+      }
+
+      separator(ctx, specY + 56);
+
+      // ── Training Status ───────────────────────────────────
+      const trainY  = specY + 74;
+      const tColor  = trainReady ? GREEN : YELLOW;
+      const tText   = trainReady ? "✓  READY TO TRAIN" : `⏳  ${hh}h ${mm}m remaining`;
+      glowText(ctx, "TRAINING STATUS", W/2, trainY,
+               "bold 20px DejaVu Sans", CYAN, hexToRgba(CYAN, 0.4), "center", 4);
+      glowText(ctx, tText, W/2, trainY + 32,
+               "bold 26px DejaVu Sans", tColor, hexToRgba(tColor, 0.6), "center", 8);
+
+      // ── Bottom deco lines ─────────────────────────────────
+      ctx.fillStyle = hexToRgba(CYAN, 0.8);
+      ctx.fillRect(35, H - 58, W - 70, 2);
+      ctx.fillStyle = hexToRgba(CYAN, 0.35);
+      ctx.fillRect(35, H - 50, W - 70, 1);
+      glowText(ctx, "⚔  FIGHTER CARD  ⚔", W/2, H - 28,
+               "18px Carlito", hexToRgba(CYAN, 0.7), CYAN, "center", 4);
+
+      // ── Save & send ───────────────────────────────────────
+      fs.writeFileSync(cachePath, canvas.toBuffer());
+
+      return api.sendMessage(
+        { body: "", attachment: fs.createReadStream(cachePath) },
+        threadID,
+        () => { try { fs.unlinkSync(cachePath); } catch (_) {} },
+        messageID
+      );
+
+    } catch (err) {
+      console.error("[battlestats]", err);
+
+      // ── Text fallback ─────────────────────────────────────
+      const userData = await usersData.get(targetID).catch(() => ({ data: {} }));
+      const name     = await usersData.getName(targetID).catch(() => "Fighter");
+      const d        = userData.data || {};
+      const { level, currentXP, xpNeeded } = getLevelAndXP(d.fightXP || 0);
+      const wins   = d.fightWins   || 0;
+      const losses = d.fightLosses || 0;
+      const wr     = (wins + losses) ? ((wins / (wins+losses)) * 100).toFixed(1) : "0.0";
+      const rankScore = level * 10 + wins;
+      const rankInfo  = RANK_DATA.find(r => rankScore >= r.min) || RANK_DATA[RANK_DATA.length - 1];
+      const xpBar  = "█".repeat(Math.min(10, Math.round((currentXP / xpNeeded) * 10))) +
+                     "░".repeat(Math.max(0, 10 - Math.round((currentXP / xpNeeded) * 10)));
+
+      return api.sendMessage(
+        `⚔️ 𝗕𝗔𝗧𝗧𝗟𝗘 𝗣𝗥𝗢𝗙𝗜𝗟𝗘\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 ${name}  |  🏅 ${rankInfo.rank}\n` +
+        `⭐ 𝗟𝘃.${level}  [${xpBar}] ${currentXP}/${xpNeeded} XP\n` +
+        `🏆 ${wins}W  💀 ${losses}L  📈 ${wr}%\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `❤️ ${100+(d.fightBonusHP||0)} HP  ⚔️ +${d.fightAtkBonus||0}  🛡️ ${d.fightDefBonus||0}%  💨 +${d.fightAgilityBonus||0}%`,
+        threadID, messageID
+      );
+
+      try { if (fs.existsSync(cachePath)) fs.unlinkSync(cachePath); } catch (_) {}
     }
-
-    msg +=
-      `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🏋️ 𝗧𝗿𝗮𝗶𝗻 𝗦𝘁𝗮𝘁𝘂𝘀: ${trainStatus}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return message.send(msg);
   },
 };
