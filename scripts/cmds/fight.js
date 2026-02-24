@@ -4,32 +4,51 @@ const gameInstances   = new Map();
 const pendingChallenges = new Map();
 
 // ═══════════════════════════════════════════════════════════════
+//   HP BAR HELPER
+// ═══════════════════════════════════════════════════════════════
+function hpBar(current, max, length = 10) {
+  const ratio = Math.max(0, Math.min(1, current / max));
+  const filled = Math.round(ratio * length);
+  const empty  = length - filled;
+  const bar    = "█".repeat(filled) + "░".repeat(empty);
+  const pct    = Math.round(ratio * 100);
+  return `[${bar}] ${pct}%`;
+}
+
+function hpLine(participant) {
+  const hp     = Math.max(0, participant.hp);
+  const maxHP  = participant.maxHP;
+  const icon   = hp > maxHP * 0.5 ? "💚" : hp > maxHP * 0.25 ? "💛" : "❤️";
+  return `${icon} ${participant.name}: ${hp}/${maxHP} HP  ${hpBar(hp, maxHP)}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
 //   MOVES DATABASE
 // ═══════════════════════════════════════════════════════════════
 const MOVES = {
   // ─── Basic Attacks ─────────────────────────────────────────
-  punch:     { min: 5,  max: 15,  emoji: "👊", type: "basic",   label: "𝘱𝘶𝘯𝘤𝘩"      },
-  kick:      { min: 10, max: 20,  emoji: "🦵", type: "basic",   label: "𝘬𝘪𝘤𝘬"       },
-  slap:      { min: 1,  max: 5,   emoji: "✋", type: "basic",   label: "𝘴𝘭𝘢𝘱"       },
-  headbutt:  { min: 15, max: 25,  emoji: "🗿", type: "basic",   label: "𝘩𝘦𝘢𝘥𝘣𝘶𝘵𝘵"   },
-  elbow:     { min: 8,  max: 18,  emoji: "💪", type: "basic",   label: "𝘦𝘭𝘣𝘰𝘸"      },
-  uppercut:  { min: 12, max: 22,  emoji: "🥊", type: "basic",   label: "𝘶𝘱𝘱𝘦𝘳𝘤𝘶𝘵"   },
+  punch:     { min: 5,  max: 15,  emoji: "👊", type: "basic",   label: "punch"      },
+  kick:      { min: 10, max: 20,  emoji: "🦵", type: "basic",   label: "kick"       },
+  slap:      { min: 1,  max: 5,   emoji: "✋", type: "basic",   label: "slap"       },
+  headbutt:  { min: 15, max: 25,  emoji: "🗿", type: "basic",   label: "headbutt"   },
+  elbow:     { min: 8,  max: 18,  emoji: "💪", type: "basic",   label: "elbow"      },
+  uppercut:  { min: 12, max: 22,  emoji: "🥊", type: "basic",   label: "uppercut"   },
   // ─── Power Attacks ─────────────────────────────────────────
-  backslash: { min: 20, max: 35,  emoji: "⚡", type: "power",   label: "𝘣𝘢𝘤𝘬𝘴𝘭𝘢𝘴𝘩"  },
-  dropkick:  { min: 18, max: 30,  emoji: "🌀", type: "power",   label: "𝘥𝘳𝘰𝘱𝘬𝘪𝘤𝘬"   },
-  suplex:    { min: 22, max: 38,  emoji: "🤼", type: "power",   label: "𝘴𝘶𝘱𝘭𝘦𝘹"     },
-  haymaker:  { min: 25, max: 40,  emoji: "💢", type: "power",   label: "𝘩𝘢𝘺𝘮𝘢𝘬𝘦𝘳"   },
-  stomp:     { min: 14, max: 28,  emoji: "👟", type: "power",   label: "𝘴𝘵𝘰𝘮𝘱"      },
+  backslash: { min: 20, max: 35,  emoji: "⚡", type: "power",   label: "backslash"  },
+  dropkick:  { min: 18, max: 30,  emoji: "🌀", type: "power",   label: "dropkick"   },
+  suplex:    { min: 22, max: 38,  emoji: "🤼", type: "power",   label: "suplex"     },
+  haymaker:  { min: 25, max: 40,  emoji: "💢", type: "power",   label: "haymaker"   },
+  stomp:     { min: 14, max: 28,  emoji: "👟", type: "power",   label: "stomp"      },
   // ─── Special Attacks (require unlocks via +fight upgrade) ──
-  deathblow: { min: 35, max: 55,  emoji: "💀", type: "special", label: "𝘥𝘦𝘢𝘵𝘩𝘣𝘭𝘰𝘸", requires: "deathblow" },
-  sonicfist: { min: 30, max: 50,  emoji: "🌪️", type: "special", label: "𝘴𝘰𝘯𝘪𝘤𝘧𝘪𝘴𝘵", requires: "sonicfist" },
-  shockwave: { min: 28, max: 45,  emoji: "⚡", type: "special", label: "𝘴𝘩𝘰𝘤𝘬𝘸𝘢𝘷𝘦",  requires: "shockwave" },
-  blazekick: { min: 32, max: 52,  emoji: "🔥", type: "special", label: "𝘣𝘭𝘢𝘻𝘦𝘬𝘪𝘤𝘬", requires: "blazekick" },
+  deathblow: { min: 35, max: 55,  emoji: "💀", type: "special", label: "deathblow", requires: "deathblow" },
+  sonicfist: { min: 30, max: 50,  emoji: "🌪️", type: "special", label: "sonicfist", requires: "sonicfist" },
+  shockwave: { min: 28, max: 45,  emoji: "⚡", type: "special", label: "shockwave",  requires: "shockwave" },
+  blazekick: { min: 32, max: 52,  emoji: "🔥", type: "special", label: "blazekick", requires: "blazekick" },
   // ─── Defense Actions ───────────────────────────────────────
-  block:     { type: "defense", emoji: "🛡️", label: "𝘣𝘭𝘰𝘤𝘬"   },
-  parry:     { type: "defense", emoji: "⚔️",  label: "𝘱𝘢𝘳𝘳𝘺"   },
-  counter:   { type: "defense", emoji: "🔄",  label: "𝘤𝘰𝘶𝘯𝘵𝘦𝘳" },
-  evade:     { type: "defense", emoji: "💨",  label: "𝘦𝘷𝘢𝘥𝘦"   },
+  block:     { type: "defense", emoji: "🛡️", label: "block"   },
+  parry:     { type: "defense", emoji: "⚔️",  label: "parry"   },
+  counter:   { type: "defense", emoji: "🔄",  label: "counter" },
+  evade:     { type: "defense", emoji: "💨",  label: "evade"   },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -41,13 +60,13 @@ function getStats(userData) {
     level:        d.fightLevel        || 1,
     wins:         d.fightWins         || 0,
     losses:       d.fightLosses       || 0,
-    atkBonus:     d.fightAtkBonus     || 0,   // flat damage bonus
-    defBonus:     d.fightDefBonus     || 0,   // % damage reduction (0–80)
-    agilityBonus: d.fightAgilityBonus || 0,   // extra % dodge chance (0–50)
-    bonusHP:      d.fightBonusHP      || 0,   // extra max HP purchased
-    abilities:    d.fightAbilities    || {},  // { heal: true, ... }
+    atkBonus:     d.fightAtkBonus     || 0,
+    defBonus:     d.fightDefBonus     || 0,
+    agilityBonus: d.fightAgilityBonus || 0,
+    bonusHP:      d.fightBonusHP      || 0,
+    abilities:    d.fightAbilities    || {},
     trait:        d.fightTrait        || null,
-    skills:       d.fightSkills       || {},  // { skillId: level }
+    skills:       d.fightSkills       || {},
     trainedAt:    d.fightTrainedAt    || 0,
     xp:           d.fightXP          || 0,
   };
@@ -109,7 +128,7 @@ module.exports = {
         });
 
       if (!fighters.length)
-        return message.reply("🥊 𝗧𝗢𝗣 𝗙𝗜𝗚𝗛𝗧𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n𝘕𝘰 𝘧𝘪𝘨𝘩𝘵𝘦𝘳𝘴 𝘺𝘦𝘵!");
+        return message.reply("🥊 𝗧𝗢𝗣 𝗙𝗜𝗚𝗛𝗧𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\nNo fighters yet!");
 
       const medals = ["🥇", "🥈", "🥉"];
       let msg = "🥊 𝗧𝗢𝗣 𝗙𝗜𝗚𝗛𝗧𝗘𝗥𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n";
@@ -119,13 +138,13 @@ module.exports = {
         const wr     = (wins + losses) ? ((wins / (wins + losses)) * 100).toFixed(1) : "0.0";
         const lvl    = u.data.fightLevel  || 1;
         msg += `${medals[i] || `${i + 1}.`} 𝗟𝘃.${lvl} ${u.name}\n`;
-        msg += `   🏆 ${wins}𝗪  💀 ${losses}𝗟  📊 ${wr}%\n\n`;
+        msg += `   🏆 ${wins}W  💀 ${losses}L  📊 ${wr}%\n\n`;
       });
       return message.reply(msg);
     }
 
     if (ongoingFights.has(threadID))
-      return message.send("⚔️ 𝗔 𝗳𝗶𝗴𝗵𝘁 𝗶𝘀 𝗮𝗹𝗿𝗲𝗮𝗱𝘆 𝗶𝗻 𝗽𝗿𝗼𝗴𝗿𝗲𝘀𝘀 𝗵𝗲𝗿𝗲.");
+      return message.send("⚔️ A fight is already in progress here.");
 
     // ── Resolve opponent ───────────────────────────────────
     let opponentID;
@@ -134,9 +153,9 @@ module.exports = {
     else if (args[0] && /^\d+$/.test(args[0]))   opponentID = args[0];
 
     if (!opponentID)
-      return message.send("🤔 𝗠𝗲𝗻𝘁𝗶𝗼𝗻, 𝗿𝗲𝗽𝗹𝘆 𝘁𝗼, 𝗼𝗿 𝗽𝗿𝗼𝘃𝗶𝗱𝗲 𝗮 𝗨𝗜𝗗 𝘁𝗼 𝗰𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲.");
+      return message.send("🤔 Mention, reply to, or provide a UID to challenge.");
     if (opponentID === event.senderID)
-      return message.send("🤡 𝗬𝗼𝘂 𝗰𝗮𝗻𝗻𝗼𝘁 𝗳𝗶𝗴𝗵𝘁 𝘆𝗼𝘂𝗿𝘀𝗲𝗹𝗳.");
+      return message.send("🤡 You cannot fight yourself.");
 
     try {
       const challengerID   = event.senderID;
@@ -152,22 +171,22 @@ module.exports = {
       await message.send(
         `🤺 𝗙𝗜𝗚𝗛𝗧 𝗖𝗛𝗔𝗟𝗟𝗘𝗡𝗚𝗘!\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `👤 ${challengerName} 𝗰𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲𝘀 ${opponentName}!\n\n` +
-        `𝗖𝗵𝗼𝗼𝘀𝗲 𝗺𝗼𝗱𝗲:\n` +
-        `  💰 Type "𝗯𝗲𝘁"      — Fight with money on the line\n` +
-        `  🤝 Type "𝗳𝗿𝗶𝗲𝗻𝗱𝗹𝘆" — Friendly match ($50M prize)\n\n` +
+        `👤 ${challengerName} challenges ${opponentName}!\n\n` +
+        `Choose mode:\n` +
+        `  💰 Type "bet"      — Fight with money on the line\n` +
+        `  🤝 Type "friendly" — Friendly match ($50M prize)\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `⏱️ 𝘙𝘦𝘱𝘭𝘺 𝘸𝘪𝘵𝘩𝘪𝘯 60𝘴 𝘰𝘳 𝘵𝘺𝘱𝘦 "𝘤𝘢𝘯𝘤𝘦𝘭"`
+        `⏱️ Reply within 60s or type "cancel"`
       );
 
       setTimeout(() => {
         if (pendingChallenges.has(key)) {
           pendingChallenges.delete(key);
-          message.send("⏰ 𝗖𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲 𝗲𝘅𝗽𝗶𝗿𝗲𝗱 — 𝗻𝗼 𝗿𝗲𝘀𝗽𝗼𝗻𝘀𝗲.");
+          message.send("⏰ Challenge expired — no response.");
         }
       }, 60_000);
     } catch {
-      return message.send("❌ 𝗖𝗼𝘂𝗹𝗱 𝗻𝗼𝘁 𝗳𝗶𝗻𝗱 𝘁𝗵𝗮𝘁 𝘂𝘀𝗲𝗿.");
+      return message.send("❌ Could not find that user.");
     }
   },
 
@@ -186,7 +205,7 @@ module.exports = {
 
       if (input === "cancel") {
         pendingChallenges.delete(cKey);
-        return message.send("❌ 𝗖𝗵𝗮𝗹𝗹𝗲𝗻𝗴𝗲 𝗰𝗮𝗻𝗰𝗲𝗹𝗹𝗲𝗱.");
+        return message.send("❌ Challenge cancelled.");
       }
 
       if (step === "mode_selection") {
@@ -195,7 +214,7 @@ module.exports = {
           pending.step = "bet_amount";
           return message.send(
             `💰 𝗕𝗘𝗧 𝗠𝗢𝗗𝗘\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `${challengerName}, 𝗵𝗼𝘄 𝗺𝘂𝗰𝗵 𝘄𝗶𝗹𝗹 𝘆𝗼𝘂 𝘄𝗮𝗴𝗲𝗿?\n(𝘔𝘪𝘯 $1,000)`
+            `${challengerName}, how much will you wager?\n(Min $1,000)`
           );
         }
         if (input === "friendly") {
@@ -211,10 +230,10 @@ module.exports = {
       if (step === "bet_amount") {
         const bet = parseInt(input.replace(/[,$\s]/g, ""));
         if (isNaN(bet) || bet < 1000)
-          return message.send("❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗮𝗺𝗼𝘂𝗻𝘁 (𝗺𝗶𝗻 $1,000).");
+          return message.send("❌ Invalid amount (min $1,000).");
         const cData = await usersData.get(challengerID);
         if (cData.money < bet)
-          return message.send(`❌ 𝗜𝗻𝘀𝘂𝗳𝗳𝗶𝗰𝗶𝗲𝗻𝘁 𝗳𝘂𝗻𝗱𝘀!\n💵 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: $${cData.money.toLocaleString()}`);
+          return message.send(`❌ Insufficient funds!\n💵 Balance: $${cData.money.toLocaleString()}`);
         pending.challengerBet = bet;
         pending.step = "waiting_opponent_bet";
 
@@ -222,8 +241,8 @@ module.exports = {
         pendingChallenges.set(oKey, { ...pending, step: "opponent_bet" });
         pendingChallenges.delete(cKey);
         return message.send(
-          `💰 ${challengerName} 𝗯𝗲𝘁𝘀 $${bet.toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `${opponentName}, 𝗵𝗼𝘄 𝗺𝘂𝗰𝗵 𝘄𝗶𝗹𝗹 𝘆𝗼𝘂 𝘄𝗮𝗴𝗲𝗿?\n(𝘛𝘺𝘱𝘦 𝘢𝘮𝘰𝘶𝘯𝘵 𝘰𝘳 "𝘥𝘦𝘤𝘭𝘪𝘯𝘦")`
+          `💰 ${challengerName} bets $${bet.toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `${opponentName}, how much will you wager?\n(Type amount or "decline")`
         );
       }
     }
@@ -235,14 +254,14 @@ module.exports = {
     if (oppChal?.step === "opponent_bet") {
       if (input === "decline") {
         pendingChallenges.delete(oKey);
-        return message.send(`❌ ${oppChal.opponentName} 𝗱𝗲𝗰𝗹𝗶𝗻𝗲𝗱 𝘁𝗵𝗲 𝗳𝗶𝗴𝗵𝘁.`);
+        return message.send(`❌ ${oppChal.opponentName} declined the fight.`);
       }
       const bet = parseInt(input.replace(/[,$\s]/g, ""));
       if (isNaN(bet) || bet < 1000)
-        return message.send("❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗮𝗺𝗼𝘂𝗻𝘁 (𝗺𝗶𝗻 $1,000).");
+        return message.send("❌ Invalid amount (min $1,000).");
       const oData = await usersData.get(senderID);
       if (oData.money < bet)
-        return message.send(`❌ 𝗜𝗻𝘀𝘂𝗳𝗳𝗶𝗰𝗶𝗲𝗻𝘁 𝗳𝘂𝗻𝗱𝘀!\n💵 𝗕𝗮𝗹𝗮𝗻𝗰𝗲: $${oData.money.toLocaleString()}`);
+        return message.send(`❌ Insufficient funds!\n💵 Balance: $${oData.money.toLocaleString()}`);
       oppChal.opponentBet = bet;
       pendingChallenges.delete(oKey);
       return this.startFight(message, usersData, oppChal);
@@ -260,7 +279,7 @@ module.exports = {
     if (senderID !== fight.currentPlayer) {
       if (!inst.turnMessageSent) {
         const curName = fight.participants.find(p => p.id === fight.currentPlayer).name;
-        await message.send(`⏳ 𝗪𝗮𝗶𝘁! 𝗜𝘁'𝘀 ${curName}'𝘀 𝘁𝘂𝗿𝗻.`);
+        await message.send(`⏳ Wait! It's ${curName}'s turn.`);
         inst.turnMessageSent = true;
       }
       return;
@@ -280,16 +299,16 @@ module.exports = {
 
       if (!healerStats.abilities?.heal)
         return message.send(
-          `🔒 𝗛𝗲𝗮𝗹 𝗻𝗼𝘁 𝘂𝗻𝗹𝗼𝗰𝗸𝗲𝗱!\n` +
-          `𝘗𝘶𝘳𝘤𝘩𝘢𝘴𝘦 𝘪𝘵 𝘧𝘰𝘳 $100,000,000 𝘶𝘴𝘪𝘯𝘨 +𝘧𝘪𝘨𝘩𝘵𝘶𝘱𝘨𝘳𝘢𝘥𝘦 𝘣𝘶𝘺 𝘩𝘦𝘢𝘭`
+          `🔒 Heal not unlocked!\n` +
+          `Purchase it for $100,000,000 using +fightupgrade buy heal`
         );
 
       const healer = fight.participants.find(p => p.id === senderID);
 
       if (fight.healUsed?.[senderID])
         return message.send(
-          `❌ 𝗬𝗼𝘂'𝘃𝗲 𝗮𝗹𝗿𝗲𝗮𝗱𝘆 𝘂𝘀𝗲𝗱 𝗵𝗲𝗮𝗹 𝘁𝗵𝗶𝘀 𝗳𝗶𝗴𝗵𝘁!\n` +
-          `💚 𝗛𝗣: ${healer.hp}/${healer.maxHP}`
+          `❌ You've already used heal this fight!\n` +
+          hpLine(healer)
         );
 
       fight.healUsed = fight.healUsed || {};
@@ -304,12 +323,12 @@ module.exports = {
 
       await message.send(
         `💚 𝗛𝗘𝗔𝗟!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `✨ ${healer.name} 𝘳𝘦𝘤𝘰𝘷𝘦𝘳𝘴 ${restored} 𝗛𝗣!\n` +
+        `✨ ${healer.name} recovers ${restored} HP!\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💚 ${healer.name}: ${healer.hp}/${healer.maxHP} HP\n` +
-        `💛 ${defender.name}: ${Math.max(0, defender.hp)}/${defender.maxHP} HP\n` +
+        `${hpLine(healer)}\n` +
+        `${hpLine(defender)}\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `⚠️ 𝘏𝘦𝘢𝘭 𝘤𝘢𝘯 𝘰𝘯𝘭𝘺 𝘣𝘦 𝘶𝘴𝘦𝘥 𝘰𝘯𝘤𝘦 𝘱𝘦𝘳 𝘧𝘪𝘨𝘩𝘵!`
+        `⚠️ Heal can only be used once per fight!`
       );
 
       fight.currentPlayer = defender.id;
@@ -331,19 +350,22 @@ module.exports = {
       let defMsg = "";
       if (input === "block") {
         fight.blockActive = { id: attacker.id, reduction: 0.45 + (defStats.defBonus / 200) };
-        defMsg = `🛡️ 𝗕𝗟𝗢𝗖𝗞!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗿𝗮𝗶𝘀𝗲𝘀 𝘁𝗵𝗲𝗶𝗿 𝗴𝘂𝗮𝗿𝗱!\n🛡️ 𝘕𝘦𝘹𝘵 𝘩𝘪𝘵 𝘳𝘦𝘥𝘶𝘤𝘦𝘥 ~45%`;
+        defMsg = `🛡️ 𝗕𝗟𝗢𝗖𝗞!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} raises their guard!\n🛡️ Next hit reduced ~45%`;
       } else if (input === "parry") {
         fight.parryActive = { id: attacker.id };
-        defMsg = `⚔️ 𝗣𝗔𝗥𝗥𝗬!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗿𝗲𝗮𝗱𝘆 𝘁𝗼 𝗿𝗲𝗳𝗹𝗲𝗰𝘁!\n⚔️ 𝘐𝘧 𝘢𝘵𝘵𝘢𝘤𝘬𝘦𝘥, 𝘳𝘦𝘧𝘭𝘦𝘤𝘵𝘴 30% 𝘥𝘮𝘨 𝘣𝘢𝘤𝘬`;
+        defMsg = `⚔️ 𝗣𝗔𝗥𝗥𝗬!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} ready to reflect!\n⚔️ If attacked, reflects 30% dmg back`;
       } else if (input === "counter") {
         fight.counterActive = { id: attacker.id };
-        defMsg = `🔄 𝗖𝗢𝗨𝗡𝗧𝗘𝗥!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗲𝗻𝘁𝗲𝗿𝘀 𝗰𝗼𝘂𝗻𝘁𝗲𝗿 𝘀𝘁𝗮𝗻𝗰𝗲!\n🔄 𝘕𝘦𝘹𝘵 𝘢𝘵𝘵𝘢𝘤𝘬 𝘣𝘰𝘶𝘯𝘤𝘦𝘴 𝘣𝘢𝘤𝘬`;
+        defMsg = `🔄 𝗖𝗢𝗨𝗡𝗧𝗘𝗥!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} enters counter stance!\n🔄 Next attack bounces back`;
       } else if (input === "evade") {
         const ch = Math.min(0.85, 0.55 + (atkStats.agilityBonus / 200));
         fight.evadeActive = { id: attacker.id, chance: ch };
-        defMsg = `💨 𝗘𝗩𝗔𝗗𝗘!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} 𝗽𝗿𝗲𝗽𝗮𝗿𝗲𝘀 𝘁𝗼 𝗱𝗼𝗱𝗴𝗲!\n💨 ${Math.round(ch * 100)}% 𝘥𝘰𝘥𝘨𝘦 𝘤𝘩𝘢𝘯𝘤𝘦 𝘯𝘦𝘹𝘵 𝘩𝘪𝘵`;
+        defMsg = `💨 𝗘𝗩𝗔𝗗𝗘!\n━━━━━━━━━━━━━━━━━━━━━━\n${attacker.name} prepares to dodge!\n💨 ${Math.round(ch * 100)}% dodge chance next hit`;
       }
-      defMsg += `\n━━━━━━━━━━━━━━━━━━━━━━\n💚 ${attacker.name}: ${attacker.hp} HP\n💚 ${defender.name}: ${defender.hp} HP`;
+      defMsg +=
+        `\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `${hpLine(attacker)}\n` +
+        `${hpLine(defender)}`;
       await message.send(defMsg);
       fight.currentPlayer = defender.id;
       inst.turnMessageSent = false;
@@ -355,7 +377,7 @@ module.exports = {
 
     // Special move lock check
     if (move.requires && !(atkStats.skills[move.requires] >= 1))
-      return message.send(`🔒 "${input}" 𝗿𝗲𝗾𝘂𝗶𝗿𝗲𝘀 𝘁𝗵𝗲 "${move.requires}" 𝘂𝗽𝗴𝗿𝗮𝗱𝗲.\nUse +fight upgrade to unlock.`);
+      return message.send(`🔒 "${input}" requires the "${move.requires}" upgrade.\nUse +fight upgrade to unlock.`);
 
     // Counter stance triggers
     if (fight.counterActive?.id === defender.id) {
@@ -363,11 +385,11 @@ module.exports = {
       attacker.hp -= 10;
       await message.send(
         `🔄 𝗖𝗢𝗨𝗡𝗧𝗘𝗥𝗘𝗗!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `${attacker.name} 𝗮𝘁𝘁𝗮𝗰𝗸𝗲𝗱 — ${defender.name} 𝗰𝗼𝘂𝗻𝘁𝗲𝗿𝗲𝗱!\n` +
-        `💥 ${attacker.name} 𝘁𝘢𝘬𝗲𝘀 10 𝗿𝗲𝗳𝗹𝗲𝗰𝘁𝗲𝗱 𝗱𝗮𝗺𝗮𝗴𝗲!\n` +
+        `${attacker.name} attacked — ${defender.name} countered!\n` +
+        `💥 ${attacker.name} takes 10 reflected damage!\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💚 ${attacker.name}: ${Math.max(0, attacker.hp)} HP\n` +
-        `💚 ${defender.name}: ${defender.hp} HP`
+        `${hpLine(attacker)}\n` +
+        `${hpLine(defender)}`
       );
       if (attacker.hp <= 0) {
         await this.handleFightEnd(message, usersData, fight, defender, attacker, false);
@@ -400,11 +422,11 @@ module.exports = {
     if (isDodge) {
       return message.send(
         `💨 𝗗𝗢𝗗𝗚𝗘𝗗!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `${move.emoji} ${attacker.name} 𝘶𝘴𝘦𝘥 ${input}\n` +
-        `🌪️ ${defender.name} 𝘦𝘷𝘢𝘥𝘦𝘥 𝘵𝘩𝘦 𝘢𝘵𝘵𝘢𝘤𝘬!\n` +
+        `${move.emoji} ${attacker.name} used ${move.label}\n` +
+        `🌪️ ${defender.name} evaded the attack!\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💚 ${attacker.name}: ${attacker.hp} HP\n` +
-        `💚 ${defender.name}: ${defender.hp} HP`
+        `${hpLine(attacker)}\n` +
+        `${hpLine(defender)}`
       ).then(() => {
         fight.currentPlayer = defender.id;
         inst.turnMessageSent = false;
@@ -424,16 +446,16 @@ module.exports = {
       attacker.hp -= ref;
       damage = Math.floor(damage * 0.7);
       delete fight.parryActive;
-      statusLine += `⚔️ 𝗣𝗔𝗥𝗥𝗬𝗘𝗗! ${def.name} 𝗿𝗲𝗳𝗹𝗲𝗰𝘁𝗲𝗱 ${ref} 𝗱𝗺𝗴!\n`.replace("def.name", defender.name);
+      statusLine += `⚔️ 𝗣𝗔𝗥𝗥𝗬𝗘𝗗! ${defender.name} reflected ${ref} dmg!\n`;
     }
     if (fight.blockActive?.id === defender.id) {
       damage = Math.floor(damage * (1 - fight.blockActive.reduction));
       delete fight.blockActive;
-      statusLine += `🛡️ 𝗕𝗟𝗢𝗖𝗞𝗘𝗗! 𝗗𝗮𝗺𝗮𝗴𝗲 𝗿𝗲𝗱𝘂𝗰𝗲𝗱!\n`;
+      statusLine += `🛡️ 𝗕𝗟𝗢𝗖𝗞𝗘𝗗! Damage reduced!\n`;
     }
     if (atkTrait?.debuff) {
       fight.debuffOnDefender = (fight.debuffOnDefender || 0) + atkTrait.debuff;
-      statusLine += `☠️ 𝗖𝗨𝗥𝗦𝗘! ${defender.name} −${atkTrait.debuff}% 𝗱𝗲𝗳!\n`;
+      statusLine += `☠️ 𝗖𝗨𝗥𝗦𝗘! ${defender.name} −${atkTrait.debuff}% def!\n`;
     }
 
     damage = Math.max(1, Math.floor(damage * (1 - dmgReduction)));
@@ -445,7 +467,7 @@ module.exports = {
       if (!fight.phoenixUsed[defender.id]) {
         fight.phoenixUsed[defender.id] = true;
         defender.hp = 1;
-        statusLine += `🔥 𝗣𝗛𝗢𝗘𝗡𝗜𝗫 𝗕𝗟𝗢𝗢𝗗! ${defender.name} 𝘴𝘶𝘳𝘷𝘪𝘷𝘦𝘴 𝘸𝘪𝘵𝘩 1 HP!\n`;
+        statusLine += `🔥 𝗣𝗛𝗢𝗘𝗡𝗜𝗫 𝗕𝗟𝗢𝗢𝗗! ${defender.name} survives with 1 HP!\n`;
       }
     }
 
@@ -453,16 +475,22 @@ module.exports = {
       ? `💥 𝗖𝗥𝗜𝗧𝗜𝗖𝗔𝗟 𝗛𝗜𝗧!\n━━━━━━━━━━━━━━━━━━━━━━\n`
       : `⚔️ 𝗔𝗧𝗧𝗔𝗖𝗞!\n━━━━━━━━━━━━━━━━━━━━━━\n`;
 
+    // ── Build attacker's current HP line (accounting for parry reflect)
+    const atkHPLine = Math.max(0, attacker.hp) > 0
+      ? hpLine(attacker)
+      : `💀 ${attacker.name}: K.O.`;
+    const defHPLine = Math.max(0, defender.hp) > 0
+      ? hpLine(defender)
+      : `💀 ${defender.name}: K.O.`;
+
     const msgOut =
       header +
       statusLine +
-      `${move.emoji} ${attacker.name} 𝘶𝘴𝘦𝘥 𝗯𝗼𝗹𝗱 ${input}\n` +
-      `💥 ${defender.name} 𝘁𝗼𝗼𝗸 ${damage} 𝗱𝗮𝗺𝗮𝗴𝗲\n` +
+      `${move.emoji} ${attacker.name} used ${move.label}\n` +
+      `💥 ${defender.name} took ${damage} damage` + (isCrit ? " ⚡ CRIT!" : "") + `\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `💚 ${attacker.name}: ${Math.max(0, attacker.hp)} HP\n` +
-      (defender.hp > 0
-        ? `💛 ${defender.name}: ${Math.max(0, defender.hp)} HP`
-        : `💀 ${defender.name}: 𝗞.𝗢.`);
+      `${atkHPLine}\n` +
+      `${defHPLine}`;
 
     await message.send(msgOut);
 
@@ -506,23 +534,23 @@ module.exports = {
 
     const first = fight.currentPlayer === challengerID ? challengerName : opponentName;
     const modeText = mode === "bet"
-      ? `💰 𝗕𝗘𝗧 𝗠𝗔𝗧𝗖𝗛\n   ${challengerName}: $${challengerBet.toLocaleString()}\n   ${opponentName}: $${opponentBet.toLocaleString()}\n   🏆 𝗣𝗼𝗼𝗹: $${(challengerBet + opponentBet).toLocaleString()}`
-      : `🤝 𝗙𝗥𝗜𝗘𝗡𝗗𝗟𝗬 𝗠𝗔𝗧𝗖𝗛\n   🏆 𝗣𝗿𝗶𝘇𝗲: $50,000,000`;
+      ? `💰 𝗕𝗘𝗧 𝗠𝗔𝗧𝗖𝗛\n   ${challengerName}: $${challengerBet.toLocaleString()}\n   ${opponentName}: $${opponentBet.toLocaleString()}\n   🏆 Pool: $${(challengerBet + opponentBet).toLocaleString()}`
+      : `🤝 𝗙𝗥𝗜𝗘𝗡𝗗𝗟𝗬 𝗠𝗔𝗧𝗖𝗛\n   🏆 Prize: $50,000,000`;
 
     await message.send(
       `🤺 𝗧𝗛𝗘 𝗗𝗨𝗘𝗟 𝗕𝗘𝗚𝗜𝗡𝗦!\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `${modeText}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `👤 ${challengerName} (${cMaxHP}HP)  𝘷𝘴  ${opponentName} (${oMaxHP}HP)\n` +
-      `⚡ 𝗙𝗶𝗿𝘀𝘁: ${first}\n\n` +
-      `💡 𝗕𝗮𝘀𝗶𝗰: 𝘱𝘶𝘯𝘤𝘩, 𝘬𝘪𝘤𝘬, 𝘴𝘭𝘢𝘱, 𝘩𝘦𝘢𝘥𝘣𝘶𝘵𝘵, 𝘦𝘭𝘣𝘰𝘸, 𝘶𝘱𝘱𝘦𝘳𝘤𝘶𝘵\n` +
-      `💥 𝗣𝗼𝘄𝗲𝗿: 𝘣𝘢𝘤𝘬𝘴𝘭𝘢𝘴𝘩, 𝘥𝘳𝘰𝘱𝘬𝘪𝘤𝘬, 𝘴𝘶𝘱𝘭𝘦𝘹, 𝘩𝘢𝘺𝘮𝘢𝘬𝘦𝘳, 𝘴𝘵𝘰𝘮𝘱\n` +
-      `🔒 𝗦𝗽𝗲𝗰𝗶𝗮𝗹 (𝘂𝗻𝗹𝗼𝗰𝗸𝗮𝗯𝗹𝗲): 𝘥𝘦𝘢𝘵𝘩𝘣𝘭𝘰𝘸, 𝘴𝘰𝘯𝘪𝘤𝘧𝘪𝘴𝘵, 𝘴𝘩𝘰𝘤𝘬𝘸𝘢𝘷𝘦, 𝘣𝘭𝘢𝘻𝘦𝘬𝘪𝘤𝘬\n` +
-      `🛡️ 𝗗𝗲𝗳𝗲𝗻𝘀𝗲: 𝘣𝘭𝘰𝘤𝘬, 𝘱𝘢𝘳𝘳𝘺, 𝘤𝘰𝘶𝘯𝘵𝘦𝘳, 𝘦𝘷𝘢𝘥𝘦\n` +
-      `💚 𝗔𝗯𝗶𝗹𝗶𝘁𝘆: 𝘩𝘦𝘢𝘭 (𝘶𝘯𝘭𝘰𝘤𝘬𝘢𝘣𝘭𝘦 — 50% 𝘏𝘗, 1×/𝘧𝘪𝘨𝘩𝘵)\n` +
+      `👤 ${challengerName} (${cMaxHP}HP)  vs  ${opponentName} (${oMaxHP}HP)\n` +
+      `⚡ First: ${first}\n\n` +
+      `💡 Basic: punch, kick, slap, headbutt, elbow, uppercut\n` +
+      `💥 Power: backslash, dropkick, suplex, haymaker, stomp\n` +
+      `🔒 Special (unlockable): deathblow, sonicfist, shockwave, blazekick\n` +
+      `🛡️ Defense: block, parry, counter, evade\n` +
+      `💚 Ability: heal (unlockable — 50% HP, 1×/fight)\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `⏱️ ${TIMEOUT_SECONDS}𝘴 𝘵𝘪𝘮𝘦𝘳 | "𝘧𝘰𝘳𝘧𝘦𝘪𝘵" 𝘵𝘰 𝘴𝘶𝘳𝘳𝘦𝘯𝘥𝘦𝘳`
+      `⏱️ ${TIMEOUT_SECONDS}s timer | "forfeit" to surrender`
     );
 
     if (mode === "bet") {
@@ -568,13 +596,13 @@ module.exports = {
     await message.send(
       `🏆 𝗩𝗜𝗖𝗧𝗢𝗥𝗬!\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `👑 ${winner.name} ${forfeited ? "𝘸𝘪𝘯𝘴 𝘣𝘺 𝘧𝘰𝘳𝘧𝘦𝘪𝘵" : "𝘥𝘦𝘧𝘦𝘢𝘵𝘴"} ${loser.name}!\n` +
+      `👑 ${winner.name} ${forfeited ? "wins by forfeit" : "defeats"} ${loser.name}!\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `${fight.mode === "bet" ? "💰 𝗪𝗶𝗻𝗻𝗶𝗻𝗴𝘀" : "🎁 𝗣𝗿𝗶𝘇𝗲"}: $${winnings.toLocaleString()}\n` +
-      `🏅 𝗩𝗶𝗰𝘁𝗼𝗿𝗶𝗲𝘀: ${newWins}\n` +
-      `✨ 𝗫𝗣 𝗚𝗮𝗶𝗻𝗲𝗱: +${xpGain}${lvlUp}\n` +
+      `🏅 Victories: ${newWins}\n` +
+      `✨ XP Gained: +${xpGain}${lvlUp}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎉 𝘎𝘎 𝘞𝘗!`
+      `🎉 GG WP!`
     );
   },
 };
@@ -588,8 +616,8 @@ function startTimeout(threadID, message) {
     const { fight } = gameInstances.get(threadID);
     await message.send(
       `⏰ 𝗧𝗜𝗠𝗘𝗢𝗨𝗧!\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `𝘍𝘪𝘨𝘩𝘵 𝘤𝘢𝘯𝘤𝘦𝘭𝘭𝘦𝘥 𝘥𝘶𝘦 𝘵𝘰 𝘪𝘯𝘢𝘤𝘵𝘪𝘷𝘪𝘵𝘺.\n` +
-      (fight.mode === "bet" ? "💰 𝘉𝘦𝘵𝘴 𝘳𝘦𝘧𝘶𝘯𝘥𝘦𝘥." : "")
+      `Fight cancelled due to inactivity.\n` +
+      (fight.mode === "bet" ? "💰 Bets refunded." : "")
     );
     if (fight.mode === "bet") {
       const ud = global.GoatBot.usersData;
