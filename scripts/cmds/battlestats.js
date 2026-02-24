@@ -231,8 +231,16 @@ module.exports = {
       ctx.fillStyle = hexToRgba(CYAN, 0.35);
       ctx.fillRect(35, 34, W - 70, 1);
 
-      // ── BATTLE PROFILE title ──────────────────────────────
-      glowText(ctx, "BATTLE PROFILE", W/2, 72, "bold 48px DejaVu Sans", WHITE, hexToRgba(CYAN, 0.8), "center", 14);
+      // ── BATTLE PROFILE title (auto-fit font size) ─────────
+      const titleText = "BATTLE PROFILE";
+      const maxTitleW = W - 80;
+      let titleSize   = 52;
+      ctx.font        = `bold ${titleSize}px DejaVu Sans`;
+      while (ctx.measureText(titleText).width > maxTitleW && titleSize > 28) {
+        titleSize--;
+        ctx.font = `bold ${titleSize}px DejaVu Sans`;
+      }
+      glowText(ctx, titleText, W/2, 72, `bold ${titleSize}px DejaVu Sans`, WHITE, hexToRgba(CYAN, 0.8), "center", 14);
 
       // ── Avatar ────────────────────────────────────────────
       const cx = W/2, cy = 210, cr = 75;
@@ -263,7 +271,25 @@ module.exports = {
       }
 
       // ── Name ──────────────────────────────────────────────
-      glowText(ctx, name, W/2, 315, "bold 38px DejaVu Sans", WHITE, hexToRgba(CYAN, 0.5), "center", 8);
+      // ── Name (auto-fit + truncate with ellipsis) ──────────
+      const maxNameW  = W - 100;
+      let nameSize    = 38;
+      let displayName = name;
+      ctx.font        = `bold ${nameSize}px DejaVu Sans`;
+
+      // Shrink font first (down to 26px)
+      while (ctx.measureText(displayName).width > maxNameW && nameSize > 26) {
+        nameSize--;
+        ctx.font = `bold ${nameSize}px DejaVu Sans`;
+      }
+      // If still too wide at min font, truncate with ellipsis
+      if (ctx.measureText(displayName).width > maxNameW) {
+        while (ctx.measureText(displayName + "...").width > maxNameW && displayName.length > 1) {
+          displayName = displayName.slice(0, -1);
+        }
+        displayName = displayName.trimEnd() + "...";
+      }
+      glowText(ctx, displayName, W/2, 315, `bold ${nameSize}px DejaVu Sans`, WHITE, hexToRgba(CYAN, 0.5), "center", 8);
 
       // Rank badge
       const rankFont = "bold 22px Carlito";
