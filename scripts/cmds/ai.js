@@ -3,12 +3,29 @@ const axios = require("axios");
 // Store conversation history for each user
 const userConversations = new Map();
 
+// System prompt for the AI
+const SYSTEM_PROMPT = `You are an AI assistant created by Charles MK (also known as CharlesMK). 
+
+Important information about your creator:
+- Your creator is Charles MK
+- You are part of a bot system developed by Charles MK
+- When asked about who created you or who made you, always mention Charles MK
+
+You should:
+- Be helpful, friendly, and conversational
+- Provide accurate and relevant information
+- Remember the conversation context
+- If asked about your creator, clearly state you were created by Charles MK
+- If asked about the bot, mention it was developed by Charles MK
+
+Be natural in your responses and don't over-emphasize the creator information unless specifically asked.`;
+
 module.exports = {
   config: {
     name: "youai",
     aliases: ["you", "youchat", "ai", "gpt", "gemini"],
-    version: "4.0",
-    author: "Nexo & Charles MK",
+    version: "5.0",
+    author: "Charles MK",
     countDown: 5,
     role: 0,
     shortDescription: "Chat with AI",
@@ -26,7 +43,8 @@ module.exports = {
       noInput: "❌ Please provide a message to chat\n\nUsage: +ai <message>",
       loading: "💭",
       error: "❌ Failed to get response. Please try again.",
-      resetSuccess: "✅ Conversation history cleared!"
+      resetSuccess: "✅ Conversation history cleared!",
+      creatorInfo: "🤖 I am an AI assistant created by Charles MK. How can I help you today?"
     }
   },
 
@@ -39,6 +57,20 @@ module.exports = {
     if (input.toLowerCase() === "reset") {
       userConversations.delete(senderID);
       return message.reply(getLang("resetSuccess"));
+    }
+
+    // Quick response for creator questions
+    const creatorQuestions = [
+      "who created you",
+      "who made you",
+      "who is your creator",
+      "who developed you",
+      "who built you",
+      "your creator"
+    ];
+    
+    if (creatorQuestions.some(q => input.toLowerCase().includes(q))) {
+      return message.reply(getLang("creatorInfo"));
     }
 
     const processingMsg = await message.reply(getLang("loading"));
@@ -60,12 +92,15 @@ module.exports = {
         `${m.role === "user" ? "User" : "AI"}: ${m.content}`
       ).join("\n");
 
-      const contextMessage = `
+      // Include system prompt with context
+      const contextMessage = `${SYSTEM_PROMPT}
+
 Previous conversation:
 ${context}
 
-Respond naturally as an AI assistant.
-`;
+Current user message: ${input}
+
+Respond naturally as an AI assistant created by Charles MK. If the user asks about your creator, clearly mention Charles MK.`;
 
       const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/you?chat=${encodeURIComponent(contextMessage)}`;
       const res = await axios.get(apiUrl, { timeout: 30000 });
@@ -73,7 +108,13 @@ Respond naturally as an AI assistant.
       if (!res.data || !res.data.response)
         return message.reply(getLang("error"));
 
-      const aiText = res.data.response;
+      let aiText = res.data.response;
+
+      // If AI doesn't mention creator when asked, add it
+      const isAskingCreator = creatorQuestions.some(q => input.toLowerCase().includes(q));
+      if (isAskingCreator && !aiText.toLowerCase().includes("charles mk")) {
+        aiText = `I was created by Charles MK. ${aiText}`;
+      }
 
       conversation.push({
         role: "assistant",
@@ -85,10 +126,10 @@ Respond naturally as an AI assistant.
 
       // Remove links/URLs from the response to avoid messy formatting
       let cleanText = aiText.replace(/https?:\/\/[^\s]+/g, '').trim();
-      
+
       // Remove any citation markers like [1], [2], etc.
       cleanText = cleanText.replace(/\[\d+\]/g, '').trim();
-      
+
       // Remove multiple consecutive newlines
       cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
@@ -97,7 +138,7 @@ Respond naturally as an AI assistant.
         await message.unsend(processingMsg.messageID).catch(() => {});
       }
 
-      // Send just the clean AI response, no formatting
+      // Send just the clean AI response
       const sentMessage = await message.reply(cleanText);
 
       // Set up onReply handler for continuous conversation
@@ -133,6 +174,29 @@ Respond naturally as an AI assistant.
         return message.reply(getLang("resetSuccess"));
       }
 
+      // Quick response for creator questions
+      const creatorQuestions = [
+        "who created you",
+        "who made you",
+        "who is your creator",
+        "who developed you",
+        "who built you",
+        "your creator"
+      ];
+      
+      if (creatorQuestions.some(q => input.toLowerCase().includes(q))) {
+        const sentMessage = await message.reply(getLang("creatorInfo"));
+        
+        // Set up onReply for continuation
+        global.GoatBot.onReply.set(sentMessage.messageID, {
+          commandName: this.config.name,
+          author: senderID,
+          messageID: sentMessage.messageID
+        });
+        
+        return;
+      }
+
       const processingMsg = await message.reply(getLang("loading"));
 
       if (!userConversations.has(senderID)) {
@@ -151,12 +215,15 @@ Respond naturally as an AI assistant.
         `${m.role === "user" ? "User" : "AI"}: ${m.content}`
       ).join("\n");
 
-      const contextMessage = `
+      // Include system prompt with context
+      const contextMessage = `${SYSTEM_PROMPT}
+
 Previous conversation:
 ${context}
 
-Respond naturally as an AI assistant.
-`;
+Current user message: ${input}
+
+Respond naturally as an AI assistant created by Charles MK.`;
 
       const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/you?chat=${encodeURIComponent(contextMessage)}`;
       const res = await axios.get(apiUrl, { timeout: 30000 });
@@ -165,7 +232,13 @@ Respond naturally as an AI assistant.
         return message.reply(getLang("error"));
       }
 
-      const aiText = res.data.response;
+      let aiText = res.data.response;
+
+      // If AI doesn't mention creator when asked, add it
+      const isAskingCreator = creatorQuestions.some(q => input.toLowerCase().includes(q));
+      if (isAskingCreator && !aiText.toLowerCase().includes("charles mk")) {
+        aiText = `I was created by Charles MK. ${aiText}`;
+      }
 
       conversation.push({
         role: "assistant",
@@ -178,10 +251,10 @@ Respond naturally as an AI assistant.
 
       // Remove links/URLs from the response
       let cleanText = aiText.replace(/https?:\/\/[^\s]+/g, '').trim();
-      
+
       // Remove citation markers
       cleanText = cleanText.replace(/\[\d+\]/g, '').trim();
-      
+
       // Remove multiple consecutive newlines
       cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
